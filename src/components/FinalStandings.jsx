@@ -26,7 +26,7 @@ export default function FinalStandings() {
         <span className="badge">{rows.length} треков</span>
       </div>
       <p className="muted" style={{ marginTop: -8, marginBottom: 18 }}>
-        Места по стадии вылета: гранд-финал, раунды нижней сетки, затем групповой этап. Внутри одного места — по среднему баллу за весь турнир.
+        Места по стадии вылета: гранд-финал, раунды нижней сетки, затем групповой этап. Среди вылетевших на одной стадии выше тот, у кого больше средний балл за весь турнир; общее место — только при полной ничьей.
       </p>
       <motion.div className="card standings" variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true, margin: '-60px' }}>
         <div className="standings__head">

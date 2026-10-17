@@ -477,7 +477,8 @@ export function currentRanking(trackIds, matches) {
  * Итоговая таблица всего турнира.
  * Места — как на TI: 1–2 по гранд-финалу, дальше по раунду вылета из нижней сетки,
  * затем вылетевшие на групповом этапе (по числу побед в швейцарке или месту в группе).
- * Треки, вылетевшие на одной стадии, делят место («5–6»), внутри — по среднему баллу.
+ * Среди вылетевших на одной стадии точное место определяет средний балл за турнир;
+ * общее место («9–11») — только при полной ничьей по баллу, победам и поражениям.
  * При досрочном завершении — по текущему рейтингу, чемпион первым.
  */
 export function finalStandings(matches, { groups = [], championId = null } = {}) {
@@ -544,12 +545,21 @@ export function finalStandings(matches, { groups = [], championId = null } = {})
   const left = ids.filter((id) => !tiers.some((t) => t.ids.includes(id)));
   if (left.length) currentRanking(left, matches).forEach((id) => tiers.push({ stage: 'Плей-офф', ids: [id] }));
 
+  // Внутри стадии точное место решает средний балл (затем победы и поражения);
+  // общее место остаётся только при полной ничьей по всем трём показателям
+  const same = (x, y) => Math.round(x.avg * 100) === Math.round(y.avg * 100) && x.wins === y.wins && x.losses === y.losses;
   const out = [];
   let place = 1;
   for (const t of tiers) {
-    const label = t.ids.length > 1 ? `${place}–${place + t.ids.length - 1}` : `${place}`;
-    t.ids.map(row).sort(byAvg).forEach((r) => out.push({ ...r, place: label, placeNum: place, stage: t.stage }));
-    place += t.ids.length;
+    const sorted = t.ids.map(row).sort(byAvg);
+    for (let i = 0; i < sorted.length; ) {
+      let j = i + 1;
+      while (j < sorted.length && same(sorted[i], sorted[j])) j++;
+      const label = j - i > 1 ? `${place}–${place + j - i - 1}` : `${place}`;
+      sorted.slice(i, j).forEach((r) => out.push({ ...r, place: label, placeNum: place, stage: t.stage }));
+      place += j - i;
+      i = j;
+    }
   }
   return out;
 }

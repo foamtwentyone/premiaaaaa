@@ -99,8 +99,16 @@ test('итоговая таблица: швейцарка + плей-офф TI',
   assert.ok(table.slice(0, 8).every((r) => r.stage !== 'Групповой этап'));
   // места не убывают
   for (let i = 1; i < table.length; i++) assert.ok(table[i].placeNum >= table[i - 1].placeNum);
-  // разделённые места: несколько треков с одинаковым диапазоном
-  assert.ok(table.some((r) => r.place.includes('–')));
+  // общее место — только при полной ничьей; иначе выше тот, у кого больше средний балл
+  for (const r of table.filter((x) => x.place.includes('–'))) {
+    const mates = table.filter((x) => x.place === r.place);
+    assert.ok(mates.every((x) => x.avg.toFixed(2) === r.avg.toFixed(2) && x.wins === r.wins && x.losses === r.losses), `ничья в ${r.place}`);
+  }
+  for (let i = 1; i < table.length; i++) {
+    if (table[i].stage === table[i - 1].stage && table[i].placeNum !== table[i - 1].placeNum) {
+      assert.ok(table[i - 1].avg >= table[i].avg, 'внутри стадии — по убыванию балла');
+    }
+  }
 });
 
 test('итоговая таблица при досрочном завершении', () => {
@@ -109,4 +117,14 @@ test('итоговая таблица при досрочном завершен
   const table = finalStandings(sw, { championId: 't3' });
   assert.equal(table[0].trackId, 't3');
   assert.equal(table.length, 8);
+});
+
+test('итоговая таблица: средний балл разводит общее место', () => {
+  const ms = [
+    { id: 'gf', stage: 'final', round: 1, status: 'done', trackA: 'a', trackB: 'b', result: { winner: 'a', loser: 'b', avgA: 8, avgB: 6 } },
+    { id: 'l1', stage: 'lower', round: 1, label: 'Нижняя сетка · Раунд 1', status: 'done', trackA: 'b', trackB: 'c', result: { winner: 'b', loser: 'c', avgA: 7, avgB: 5 } },
+    { id: 'l2', stage: 'lower', round: 1, label: 'Нижняя сетка · Раунд 1', status: 'done', trackA: 'a', trackB: 'd', result: { winner: 'a', loser: 'd', avgA: 9, avgB: 6.5 } },
+  ];
+  const t = finalStandings(ms);
+  assert.deepEqual(t.map((r) => [r.trackId, r.place]), [['a', '1'], ['b', '2'], ['d', '3'], ['c', '4']]);
 });
