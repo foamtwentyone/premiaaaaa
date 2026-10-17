@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sendEmailVerification } from 'firebase/auth';
@@ -166,12 +167,16 @@ export default function Battle() {
         </div>
       )}
 
-      {siblings.length > 1 && (
-        <>
-          <PagerButton to={prev} dir="left" side />
-          <PagerButton to={next} dir="right" side />
-        </>
-      )}
+      {siblings.length > 1 &&
+        // Портал в body: у анимированной страницы есть transform, и position: fixed внутри неё
+        // отсчитывался бы от страницы, а не от окна — стрелки наезжали на карточки
+        createPortal(
+          <>
+            <PagerButton to={prev} dir="left" side />
+            <PagerButton to={next} dir="right" side />
+          </>,
+          document.body,
+        )}
 
       <div className="arena">
         <Contender track={ta} side="a" score={a} onScore={setA} canVote={canVote} result={result} avg={result?.avgA} delay={0.05} />
