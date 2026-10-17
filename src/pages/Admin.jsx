@@ -18,16 +18,35 @@ const TABS = [
 ];
 
 export default function Admin() {
-  const { isAdmin, user } = useData();
+  const { isAdmin, adminCheck, user } = useData();
   const [tab, setTab] = useState('tracks');
+  const toast = useToast();
 
   if (!user || !isAdmin) {
     return (
       <Empty icon="lock" title="Только для организатора">
         {user ? (
-          <>
-            Чтобы получить доступ, создайте в Firestore документ <code>admins/{user.uid}</code> (любое содержимое) и обновите страницу.
-          </>
+          <div style={{ maxWidth: 520, margin: '0 auto' }}>
+            {adminCheck === 'denied' ? (
+              <div className="error" style={{ textAlign: 'left' }}>
+                Правила Firestore не загружены — сайт не может проверить права. Выполните в папке проекта:
+                <pre style={{ margin: '8px 0 0' }}>npx firebase deploy --only firestore</pre>
+              </div>
+            ) : (
+              <p>
+                В Firestore нет документа <b>admins / ваш UID</b>. Создайте коллекцию <code>admins</code>, а в поле
+                <b> Document ID</b> вставьте UID ниже (не нажимайте Auto-ID).
+              </p>
+            )}
+            <p className="tiny" style={{ marginBottom: 6 }}>Ваш UID:</p>
+            <div className="row" style={{ justifyContent: 'center' }}>
+              <code className="badge" style={{ textTransform: 'none', fontSize: 14 }}>{user.uid}</code>
+              <button className="btn btn--ghost btn--sm" onClick={() => navigator.clipboard.writeText(user.uid).then(() => toast('UID скопирован'))}>
+                Копировать
+              </button>
+            </div>
+            <p className="tiny">После этого обновите страницу.</p>
+          </div>
         ) : (
           <Link to="/login?next=/admin" className="link-btn">Войти</Link>
         )}

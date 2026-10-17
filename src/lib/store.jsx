@@ -8,6 +8,8 @@ const Ctx = createContext(null);
 export function DataProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined — ещё загружается
   const [isAdmin, setIsAdmin] = useState(false);
+  // Почему не админ: 'missing' — нет документа admins/{uid}, 'denied' — правила Firestore не загружены
+  const [adminCheck, setAdminCheck] = useState(null);
   const [profile, setProfile] = useState(null);
   const [tracks, setTracks] = useState([]);
   const [tournament, setTournament] = useState(null);
@@ -48,7 +50,15 @@ export function DataProvider({ children }) {
       setProfile(null);
       return;
     }
-    getDoc(doc(db, 'admins', user.uid)).then((s) => setIsAdmin(s.exists())).catch(() => setIsAdmin(false));
+    getDoc(doc(db, 'admins', user.uid))
+      .then((s) => {
+        setIsAdmin(s.exists());
+        setAdminCheck(s.exists() ? 'ok' : 'missing');
+      })
+      .catch((e) => {
+        setIsAdmin(false);
+        setAdminCheck(e.code === 'permission-denied' ? 'denied' : 'error');
+      });
     const u1 = onSnapshot(doc(db, 'users', user.uid), (s) => setProfile(s.exists() ? s.data() : null), () => {});
     const u2 = onSnapshot(query(collection(db, 'votes'), where('uid', '==', user.uid)), (s) => {
       const map = {};
@@ -64,13 +74,13 @@ export function DataProvider({ children }) {
       (a, b) => stageRank(a) - stageRank(b) || (a.round ?? 0) - (b.round ?? 0) || (a.group ?? '').localeCompare(b.group ?? '') || (a.order ?? 0) - (b.order ?? 0),
     );
     return {
-      user, isAdmin, profile,
+      user, isAdmin, adminCheck, profile,
       tracks: [...tracks].sort((a, b) => (a.createdAt?.seconds ?? 0) - (b.createdAt?.seconds ?? 0)),
       trackById, tournament, matches: sorted, myVotes,
       ready: user !== undefined && loaded.tracks && loaded.tournament && loaded.matches,
       displayName: profile?.name || user?.displayName || user?.email?.split('@')[0] || '',
     };
-  }, [user, isAdmin, profile, tracks, tournament, matches, myVotes, loaded]);
+  }, [user, isAdmin, adminCheck, profile, tracks, tournament, matches, myVotes, loaded]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
