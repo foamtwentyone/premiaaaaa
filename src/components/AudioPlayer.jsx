@@ -48,8 +48,13 @@ export default function AudioPlayer({ src, accent }) {
     setPlaying(false);
   }, [src]);
 
-  useEffect(() => () => {
-    if (current === audio.current) current = null;
+  // При уходе со страницы (например, листая пары) трек должен замолчать
+  useEffect(() => {
+    const el = audio.current;
+    return () => {
+      el?.pause();
+      if (current === el) current = null;
+    };
   }, []);
 
   const toggle = async () => {

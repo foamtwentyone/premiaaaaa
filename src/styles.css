@@ -1023,6 +1023,89 @@ h4 {
   line-height: 1;
 }
 
+/* Листание пар тура */
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: -8px 0 22px;
+}
+
+.pager__btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 4px 0 var(--line);
+  transition: transform 0.25s var(--spring);
+}
+
+.pager__btn:hover { transform: translateY(-2px) scale(1.06); }
+.pager__btn:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--line); }
+.pager__btn.is-disabled { opacity: 0.35; box-shadow: none; }
+
+.pager__dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.pager__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 99px;
+  background: #b9abe6;
+  transition: width 0.35s var(--spring), background 0.2s, transform 0.2s;
+}
+
+.pager__dot:hover { transform: scale(1.3); }
+.pager__dot.is-live { background: var(--pink); }
+.pager__dot.is-voted { background: var(--lime); }
+.pager__dot.is-current { width: 28px; background: var(--ink); }
+
+.pager__count {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Большие стрелки по бокам — только когда по краям экрана есть место */
+.pager-side {
+  display: none;
+}
+
+@media (min-width: 1400px) {
+  .pager-side {
+    position: fixed;
+    top: 50%;
+    z-index: 20;
+    width: 76px;
+    height: 76px;
+    margin-top: -38px;
+    border-radius: 26px;
+    display: grid;
+    place-items: center;
+    font-size: 34px;
+    color: #fff;
+    background: var(--purple);
+    box-shadow: 0 7px 0 var(--purple-d);
+    transition: transform 0.3s var(--spring), box-shadow 0.15s;
+  }
+
+  .pager-side--left { left: max(24px, calc(50% - 590px - 120px)); transform: rotate(-4deg); }
+  .pager-side--right { right: max(24px, calc(50% - 590px - 120px)); transform: rotate(4deg); }
+  .pager-side:hover { transform: scale(1.1) rotate(0deg); }
+  .pager-side:active { transform: translateY(5px); box-shadow: 0 2px 0 var(--purple-d); }
+  .pager-side.is-disabled { opacity: 0.25; box-shadow: none; pointer-events: none; }
+}
+
 .vote-bar {
   margin-top: 28px;
   padding: 22px;

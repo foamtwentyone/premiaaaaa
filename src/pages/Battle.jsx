@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { sendEmailVerification } from 'firebase/auth';
 import { useData, useCountdown, formatLeft, isVotingOpen } from '../lib/store.jsx';
@@ -51,6 +51,19 @@ function Contender({ track, side, score, onScore, canVote, result, avg, delay })
   );
 }
 
+/** Стрелка листания пар: в строке под заголовком или большая — по бокам экрана */
+function PagerButton({ to, dir, side }) {
+  const Glyph = dir === 'left' ? Icon.chevronLeft : Icon.chevronRight;
+  const label = dir === 'left' ? 'Предыдущая пара' : 'Следующая пара';
+  const cls = side ? `pager-side pager-side--${dir}` : 'pager__btn';
+  if (!to) return <span className={`${cls} is-disabled`} aria-hidden><Glyph /></span>;
+  return (
+    <Link to={`/battle/${to.id}`} className={cls} title={`${label} (${dir === 'left' ? '←' : '→'})`} aria-label={label}>
+      <Glyph />
+    </Link>
+  );
+}
+
 export default function Battle() {
   const { id } = useParams();
   const { matches, trackById, user, myVotes } = useData();
@@ -63,6 +76,29 @@ export default function Battle() {
   const left = useCountdown(m?.status === 'live' ? m.endsAt : null);
   const btn = useRef(null);
   const celebrated = useRef(false);
+  const navigate = useNavigate();
+
+  // Пары того же тура (той же стадии и раунда) — их можно листать стрелками
+  const siblings = m ? matches.filter((x) => x.stage === m.stage && x.round === m.round) : [];
+  const index = siblings.findIndex((x) => x.id === id);
+  const prev = siblings[index - 1];
+  const next = siblings[index + 1];
+
+  const siblingIds = siblings.map((x) => x.id).join(',');
+  useEffect(() => {
+    const ids = siblingIds.split(',');
+    const onKey = (e) => {
+      // Не перехватываем стрелки, когда фокус в ползунке, поле ввода или с модификаторами
+      if (e.altKey || e.ctrlKey || e.metaKey || e.target.closest?.('input, textarea, select')) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      // Текущую пару берём из адреса: при быстрых нажатиях уходящая страница ещё жива
+      const cur = ids.indexOf(decodeURIComponent(window.location.pathname.split('/').pop()));
+      const target = ids[cur + (e.key === 'ArrowLeft' ? -1 : 1)];
+      if (cur >= 0 && target) navigate(`/battle/${target}`);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [siblingIds, navigate]);
 
   useEffect(() => {
     setA(mine?.a ?? null);
@@ -111,6 +147,31 @@ export default function Battle() {
           <StatusBadge status={left === 0 ? 'ready' : m.status} />
         </div>
       </div>
+
+      {siblings.length > 1 && (
+        <div className="pager">
+          <PagerButton to={prev} dir="left" />
+          <div className="pager__dots" aria-label={`Пара ${index + 1} из ${siblings.length}`}>
+            {siblings.map((x, i) => (
+              <Link
+                key={x.id}
+                to={`/battle/${x.id}`}
+                title={`Пара ${i + 1}${myVotes[x.id] ? ' · вы проголосовали' : ''}`}
+                className={`pager__dot ${x.id === id ? 'is-current' : myVotes[x.id] ? 'is-voted' : x.status === 'live' ? 'is-live' : ''}`}
+              />
+            ))}
+          </div>
+          <span className="pager__count">{index + 1} / {siblings.length}</span>
+          <PagerButton to={next} dir="right" />
+        </div>
+      )}
+
+      {siblings.length > 1 && (
+        <>
+          <PagerButton to={prev} dir="left" side />
+          <PagerButton to={next} dir="right" side />
+        </>
+      )}
 
       <div className="arena">
         <Contender track={ta} side="a" score={a} onScore={setA} canVote={canVote} result={result} avg={result?.avgA} delay={0.05} />

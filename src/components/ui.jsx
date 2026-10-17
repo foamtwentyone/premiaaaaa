@@ -250,6 +250,8 @@ export const Icon = {
   pause: () => <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="5" height="16" rx="1.6" /><rect x="14" y="4" width="5" height="16" rx="1.6" /></svg>,
   vol: () => svg(<><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></>),
   mute: () => svg(<><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" /><path d="M16 9l5 6M21 9l-5 6" /></>),
+  chevronLeft: () => svg(<path d="M15 5l-7 7 7 7" strokeWidth="3" />),
+  chevronRight: () => svg(<path d="M9 5l7 7-7 7" strokeWidth="3" />),
   back5: () => svg(<><path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v5h5" /></>),
   headphones: () => svg(<><path d="M4 15v-3a8 8 0 0 1 16 0v3" /><rect x="3" y="14" width="5" height="7" rx="2" fill="currentColor" /><rect x="16" y="14" width="5" height="7" rx="2" fill="currentColor" /></>),
   flame: () => svg(<path d="M12 2c1 3 4.2 4.6 5 8 .3-1 .2-2-.3-3 2 1.6 2.8 4 2.8 6.5a7.5 7.5 0 0 1-15 0c0-3.3 2-5.6 4-7 0 1.8.6 3 1.7 3.6C10 7 10.6 4.6 12 2z" fill="currentColor" />),
