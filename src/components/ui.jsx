@@ -16,7 +16,7 @@ export const softSpring = { type: 'spring', stiffness: 220, damping: 22 };
 
 /* ---------- Обложка ---------- */
 
-export function Cover({ track, className = '', style }) {
+export function Cover({ track, className = '', style, eager = false }) {
   const [broken, setBroken] = useState(false);
   const color = accentFor(track?.id);
   const initials = (track?.title || '?')
@@ -31,7 +31,7 @@ export function Cover({ track, className = '', style }) {
       style={{ background: `linear-gradient(135deg, ${color}, ${color}bb)`, ...style }}
     >
       {track?.coverUrl && !broken ? (
-        <img src={track.coverUrl} alt="" loading="lazy" onError={() => setBroken(true)} />
+        <img src={track.coverUrl} alt="" loading={eager ? 'eager' : 'lazy'} decoding={eager ? 'sync' : 'async'} onError={() => setBroken(true)} />
       ) : (
         <span className="cover__initials">{initials}</span>
       )}

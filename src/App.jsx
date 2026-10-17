@@ -30,13 +30,15 @@ function Page({ children }) {
 function Routed() {
   const { ready } = useData();
   const location = useLocation();
+  const pageKey = location.pathname.startsWith('/battle/') ? '/battle' : location.pathname;
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [location.pathname]);
+  }, [pageKey]);
   if (!ready) return <Loader />;
   return (
     <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+      {/* Все страницы боёв — одна «страница»: при листании пар не перерисовываем её целиком */}
+      <Routes location={location} key={location.pathname.startsWith('/battle/') ? '/battle' : location.pathname}>
         <Route path="/" element={<Page><Home /></Page>} />
         <Route path="/battles" element={<Page><Battles /></Page>} />
         <Route path="/battle/:id" element={<Page><Battle /></Page>} />

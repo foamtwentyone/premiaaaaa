@@ -10,20 +10,20 @@ import ScorePicker from '../components/ScorePicker.jsx';
 import { Cover, StatusBadge, Empty, CountUp, Icon, accentFor, fireConfetti, useToast, softSpring, spring } from '../components/ui.jsx';
 import { plural } from '../components/MatchCard.jsx';
 
-function Contender({ track, side, score, onScore, canVote, result, avg, delay }) {
+function Contender({ track, side, score, onScore, canVote, result, avg, delay, intro }) {
   const accent = accentFor(track?.id);
   const isWinner = result && result.winner === track?.id;
   return (
     <motion.div
       className={`card contender ${isWinner ? 'is-winner' : ''}`}
       style={{ '--accent': accent }}
-      initial={{ opacity: 0, x: side === 'a' ? -60 : 60, rotate: side === 'a' ? -3 : 3 }}
+      initial={intro ? { opacity: 0, x: side === 'a' ? -60 : 60, rotate: side === 'a' ? -3 : 3 } : false}
       animate={{ opacity: 1, x: 0, rotate: 0 }}
       transition={{ ...softSpring, delay }}
     >
       <div className="contender__top">
         <motion.div whileHover={{ rotate: side === 'a' ? -4 : 4, scale: 1.04 }} transition={spring}>
-          <Cover track={track} />
+          <Cover track={track} eager />
         </motion.div>
         <div style={{ minWidth: 0 }}>
           <h2 className="contender__title">{track?.title ?? 'Определится позже'}</h2>
@@ -65,55 +65,46 @@ function PagerButton({ to, dir, side }) {
   );
 }
 
-export default function Battle() {
-  const { id } = useParams();
-  const { matches, trackById, user, myVotes } = useData();
+// Обложки соседних пар грузим и декодируем заранее — при листании картинки не мигают
+const preloaded = new Map();
+function preloadCover(url) {
+  if (!url || preloaded.has(url)) return;
+  const img = new Image();
+  img.decoding = 'async';
+  img.src = url;
+  img.decode?.().catch(() => {});
+  preloaded.set(url, img);
+}
+
+// Пара уезжает в сторону листания, новая въезжает с другой стороны
+const slide = {
+  enter: (dir) => ({ opacity: 0, x: dir * 80 }),
+  center: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 380, damping: 34 } },
+  exit: (dir) => ({ opacity: 0, x: dir * -80, transition: { duration: 0.18, ease: 'easeIn' } }),
+};
+
+/** Пара треков и блок голосования — единственная часть страницы, которая анимируется при листании */
+function BattleBody({ m, intro, left }) {
+  const { trackById, user, myVotes } = useData();
   const toast = useToast();
-  const m = matches.find((x) => x.id === id);
-  const mine = myVotes[id];
+  const mine = myVotes[m.id];
   const [a, setA] = useState(mine?.a ?? null);
   const [b, setB] = useState(mine?.b ?? null);
   const [busy, setBusy] = useState(false);
-  const left = useCountdown(m?.status === 'live' ? m.endsAt : null);
   const btn = useRef(null);
-  const celebrated = useRef(false);
-  const navigate = useNavigate();
-
-  // Пары того же тура (той же стадии и раунда) — их можно листать стрелками
-  const siblings = m ? matches.filter((x) => x.stage === m.stage && x.round === m.round) : [];
-  const index = siblings.findIndex((x) => x.id === id);
-  const prev = siblings[index - 1];
-  const next = siblings[index + 1];
-
-  const siblingIds = siblings.map((x) => x.id).join(',');
-  useEffect(() => {
-    const ids = siblingIds.split(',');
-    const onKey = (e) => {
-      // Не перехватываем стрелки, когда фокус в ползунке, поле ввода или с модификаторами
-      if (e.altKey || e.ctrlKey || e.metaKey || e.target.closest?.('input, textarea, select')) return;
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      // Текущую пару берём из адреса: при быстрых нажатиях уходящая страница ещё жива
-      const cur = ids.indexOf(decodeURIComponent(window.location.pathname.split('/').pop()));
-      const target = ids[cur + (e.key === 'ArrowLeft' ? -1 : 1)];
-      if (cur >= 0 && target) navigate(`/battle/${target}`);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [siblingIds, navigate]);
 
   useEffect(() => {
     setA(mine?.a ?? null);
     setB(mine?.b ?? null);
   }, [mine?.a, mine?.b]);
 
+  // Конфетти по итогам — только при открытии страницы, а не на каждой пролистанной паре
   useEffect(() => {
-    if (m?.status === 'done' && !celebrated.current) {
-      celebrated.current = true;
-      setTimeout(() => fireConfetti(), 500);
+    if (intro && m.status === 'done') {
+      const t = setTimeout(() => fireConfetti(), 500);
+      return () => clearTimeout(t);
     }
-  }, [m?.status]);
-
-  if (!m) return <Empty icon="question" title="Бой не найден"><Link to="/battles" className="link-btn">← Ко всем боям</Link></Empty>;
+  }, [intro, m.status]);
 
   const ta = trackById[m.trackA];
   const tb = trackById[m.trackB];
@@ -138,63 +129,23 @@ export default function Battle() {
 
   return (
     <>
-      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <Link to="/battles" className="tiny" style={{ fontWeight: 800 }}>← Все бои</Link>
-          <h1 className="page-title" style={{ fontSize: 'clamp(26px, 4.5vw, 40px)', marginTop: 8 }}>{m.label}</h1>
-        </div>
-        <div className="row">
-          {left != null && left > 0 && <span className="badge badge--yellow"><Icon.timer /> {formatLeft(left)}</span>}
-          <StatusBadge status={left === 0 ? 'ready' : m.status} />
-        </div>
-      </div>
-
-      {siblings.length > 1 && (
-        <div className="pager">
-          <PagerButton to={prev} dir="left" />
-          <div className="pager__dots" aria-label={`Пара ${index + 1} из ${siblings.length}`}>
-            {siblings.map((x, i) => (
-              <Link
-                key={x.id}
-                to={`/battle/${x.id}`}
-                title={`Пара ${i + 1}${myVotes[x.id] ? ' · вы проголосовали' : ''}`}
-                className={`pager__dot ${x.id === id ? 'is-current' : myVotes[x.id] ? 'is-voted' : x.status === 'live' ? 'is-live' : ''}`}
-              />
-            ))}
-          </div>
-          <span className="pager__count">{index + 1} / {siblings.length}</span>
-          <PagerButton to={next} dir="right" />
-        </div>
-      )}
-
-      {siblings.length > 1 &&
-        // Портал в body: у анимированной страницы есть transform, и position: fixed внутри неё
-        // отсчитывался бы от страницы, а не от окна — стрелки наезжали на карточки
-        createPortal(
-          <>
-            <PagerButton to={prev} dir="left" side />
-            <PagerButton to={next} dir="right" side />
-          </>,
-          document.body,
-        )}
-
       <div className="arena">
-        <Contender track={ta} side="a" score={a} onScore={setA} canVote={canVote} result={result} avg={result?.avgA} delay={0.05} />
+        <Contender track={ta} side="a" score={a} onScore={setA} canVote={canVote} result={result} avg={result?.avgA} delay={0.05} intro={intro} />
         <motion.div
           className="arena__vs"
-          initial={{ scale: 0, rotate: -180 }}
+          initial={intro ? { scale: 0, rotate: -180 } : false}
           animate={{ scale: 1, rotate: -8 }}
           whileHover={{ rotate: 8, scale: 1.1 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 14, delay: 0.3 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 14, delay: intro ? 0.3 : 0 }}
         >
           VS
         </motion.div>
-        <Contender track={tb} side="b" score={b} onScore={setB} canVote={canVote} result={result} avg={result?.avgB} delay={0.15} />
+        <Contender track={tb} side="b" score={b} onScore={setB} canVote={canVote} result={result} avg={result?.avgB} delay={0.15} intro={intro} />
       </div>
 
       <AnimatePresence mode="wait">
         {result ? (
-          <motion.div key="res" className="card vote-bar" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={softSpring}>
+          <motion.div key="res" className="card vote-bar" initial={intro ? { opacity: 0, y: 30 } : false} animate={{ opacity: 1, y: 0 }} transition={softSpring}>
             <div>
               <h3 style={{ fontSize: 20 }}>Победитель: {trackById[result.winner]?.title}</h3>
               <div className="muted">
@@ -205,7 +156,7 @@ export default function Battle() {
             </div>
           </motion.div>
         ) : m.status === 'live' && ta && tb ? (
-          <motion.div key="vote" className="card vote-bar" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ ...softSpring, delay: 0.3 }}>
+          <motion.div key="vote" className="card vote-bar" initial={intro ? { opacity: 0, y: 30 } : false} animate={{ opacity: 1, y: 0 }} transition={{ ...softSpring, delay: 0.3 }}>
             {!user ? (
               <>
                 <div>
@@ -253,7 +204,7 @@ export default function Battle() {
             )}
           </motion.div>
         ) : (
-          <motion.div key="wait" className="card vote-bar" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <motion.div key="wait" className="card vote-bar" initial={intro ? { opacity: 0 } : false} animate={{ opacity: 1 }}>
             <div>
               <h3 style={{ fontSize: 20 }}>
                 {m.status === 'cancelled' ? 'Бой отменён' : m.status === 'pending' ? 'Соперники ещё не определены' : 'Голосование скоро откроется'}
@@ -263,6 +214,104 @@ export default function Battle() {
           </motion.div>
         )}
       </AnimatePresence>
+    </>
+  );
+}
+
+export default function Battle() {
+  const { id } = useParams();
+  const { matches, trackById, myVotes } = useData();
+  const m = matches.find((x) => x.id === id);
+  const left = useCountdown(m?.status === 'live' ? m.endsAt : null);
+  const navigate = useNavigate();
+
+  // Пары того же тура (той же стадии и раунда) — их можно листать стрелками
+  const siblings = m ? matches.filter((x) => x.stage === m.stage && x.round === m.round) : [];
+  const index = siblings.findIndex((x) => x.id === id);
+  const prev = siblings[index - 1];
+  const next = siblings[index + 1];
+
+  // Направление листания и «первый показ» страницы (для интро-анимаций)
+  const firstId = useRef(id);
+  const lastIndex = useRef(index);
+  const dir = index >= lastIndex.current ? 1 : -1;
+  useEffect(() => {
+    lastIndex.current = index;
+  }, [index]);
+
+  const siblingIds = siblings.map((x) => x.id).join(',');
+  useEffect(() => {
+    const ids = siblingIds.split(',');
+    const onKey = (e) => {
+      // Не перехватываем стрелки, когда фокус в ползунке, поле ввода или с модификаторами
+      if (e.altKey || e.ctrlKey || e.metaKey || e.target.closest?.('input, textarea, select')) return;
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const cur = ids.indexOf(decodeURIComponent(window.location.pathname.split('/').pop()));
+      const target = ids[cur + (e.key === 'ArrowLeft' ? -1 : 1)];
+      if (cur >= 0 && target) navigate(`/battle/${target}`);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [siblingIds, navigate]);
+
+  // Предзагрузка обложек всех пар тура
+  const coverKey = siblings.flatMap((x) => [trackById[x.trackA]?.coverUrl, trackById[x.trackB]?.coverUrl]).join('|');
+  useEffect(() => {
+    coverKey.split('|').forEach(preloadCover);
+  }, [coverKey]);
+
+  if (!m) return <Empty icon="question" title="Бой не найден"><Link to="/battles" className="link-btn">← Ко всем боям</Link></Empty>;
+
+  return (
+    <>
+      <div className="row" style={{ justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <Link to="/battles" className="tiny" style={{ fontWeight: 800 }}>← Все бои</Link>
+          <h1 className="page-title" style={{ fontSize: 'clamp(26px, 4.5vw, 40px)', marginTop: 8 }}>{m.label}</h1>
+        </div>
+        <div className="row">
+          {left != null && left > 0 && <span className="badge badge--yellow"><Icon.timer /> {formatLeft(left)}</span>}
+          <StatusBadge status={left === 0 ? 'ready' : m.status} />
+        </div>
+      </div>
+
+      {siblings.length > 1 && (
+        <div className="pager">
+          <PagerButton to={prev} dir="left" />
+          <div className="pager__dots" aria-label={`Пара ${index + 1} из ${siblings.length}`}>
+            {siblings.map((x, i) => (
+              <Link
+                key={x.id}
+                to={`/battle/${x.id}`}
+                title={`Пара ${i + 1}${myVotes[x.id] ? ' · вы проголосовали' : ''}`}
+                className={`pager__dot ${x.id === id ? 'is-current' : myVotes[x.id] ? 'is-voted' : x.status === 'live' ? 'is-live' : ''}`}
+              />
+            ))}
+          </div>
+          <span className="pager__count">{index + 1} / {siblings.length}</span>
+          <PagerButton to={next} dir="right" />
+        </div>
+      )}
+
+      {siblings.length > 1 &&
+        // Портал в body: у анимированной страницы есть transform, и position: fixed внутри неё
+        // отсчитывался бы от страницы, а не от окна — стрелки наезжали на карточки
+        createPortal(
+          <>
+            <PagerButton to={prev} dir="left" side />
+            <PagerButton to={next} dir="right" side />
+          </>,
+          document.body,
+        )}
+
+      {/* popLayout: уходящая пара «вынимается» из потока, новая въезжает одновременно — без пустого кадра */}
+      <div style={{ position: 'relative' }}>
+        <AnimatePresence mode="popLayout" custom={dir} initial={false}>
+          <motion.div key={id} custom={dir} variants={slide} initial="enter" animate="center" exit="exit">
+            <BattleBody m={m} intro={id === firstId.current} left={left} />
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </>
   );
 }
