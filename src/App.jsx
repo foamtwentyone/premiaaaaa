@@ -30,7 +30,9 @@ function Page({ children }) {
 function Routed() {
   const { ready } = useData();
   const location = useLocation();
-  useEffect(() => window.scrollTo(0, 0), [location.pathname]);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
   if (!ready) return <Loader />;
   return (
     <AnimatePresence mode="wait">

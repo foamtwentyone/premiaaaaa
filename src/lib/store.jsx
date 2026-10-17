@@ -15,7 +15,12 @@ export function DataProvider({ children }) {
   const [myVotes, setMyVotes] = useState({});
   const [loaded, setLoaded] = useState({ tracks: false, tournament: false, matches: false });
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, setUser);
+    return () => {
+      if (typeof unsub === 'function') unsub();
+    };
+  }, []);
 
   useEffect(() => {
     const done = (k) => () => setLoaded((s) => (s[k] ? s : { ...s, [k]: true }));
@@ -33,7 +38,7 @@ export function DataProvider({ children }) {
         done('matches')();
       }, done('matches')),
     ];
-    return () => unsubs.forEach((u) => u());
+    return () => unsubs.forEach((u) => typeof u === 'function' && u());
   }, []);
 
   useEffect(() => {
