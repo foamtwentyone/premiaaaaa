@@ -3,6 +3,7 @@ import {
   query, where, serverTimestamp, Timestamp, getCountFromServer,
 } from 'firebase/firestore';
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { readTags, guessFromFilename } from './id3.js';
 import { db, storage } from './firebase.js';
 import {
   splitIntoGroups, buildGroupMatches, seedsFromGroups, buildPlayoffs, resolveSlots, decide, champion,
@@ -50,6 +51,43 @@ export function compressImage(file, size = 400) {
   });
 }
 
+/**
+ * Данные трека из самого файла: название и артист из тегов ID3 (или из имени файла
+ * «Артист - Название.mp3»), обложка — встроенная картинка, сжатая до 400px.
+ */
+export async function trackFromFile(path) {
+  const audioUrl = normalizeAudioUrl(path);
+  const fallback = guessFromFilename(audioUrl);
+  let tags = { title: '', artist: '', picture: null };
+  try {
+    tags = await readTags(audioUrl);
+  } catch {
+    /* нет тегов или не mp3 — берём из имени файла */
+  }
+  let coverUrl = '';
+  if (tags.picture) {
+    try {
+      coverUrl = await compressImage(tags.picture);
+    } catch {
+      /* битая картинка в теге */
+    }
+  }
+  return {
+    title: tags.title || fallback.title,
+    artist: tags.artist || fallback.artist,
+    audioUrl,
+    coverUrl,
+  };
+}
+
+/** Файлы из public/tracks (список собирается при запуске/сборке сайта) */
+export async function listFolderTracks() {
+  const res = await fetch('/tracks/index.json', { cache: 'no-store' });
+  if (!res.ok) return [];
+  const list = await res.json().catch(() => []);
+  return list.map((name) => ({ name, audioUrl: normalizeAudioUrl(`/tracks/${name}`) }));
+}
+
 const normalizeCover = (u = '') => {
   const s = u.trim();
   return s && !/^[a-z]+:/i.test(s) ? encodeURI(decodeURI(s.replace(/^\/?(public\/)?/, '/'))) : s;
@@ -58,7 +96,7 @@ const normalizeCover = (u = '') => {
 export async function saveTrack(id, data) {
   const payload = {
     title: data.title.trim(),
-    artist: data.artist.trim(),
+    artist: data.artist.trim() || 'Неизвестный артист',
     audioUrl: normalizeAudioUrl(data.audioUrl),
     coverUrl: data.coverUrl?.startsWith('data:') ? data.coverUrl : normalizeCover(data.coverUrl),
     updatedAt: serverTimestamp(),

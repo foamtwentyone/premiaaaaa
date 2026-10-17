@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useData } from '../lib/store.jsx';
 import { storage } from '../lib/firebase.js';
 import {
-  saveTrack, deleteTrack, uploadFile, compressImage, normalizeAudioUrl, startTournament, startPlayoffs, resetTournament,
+  saveTrack, deleteTrack, uploadFile, compressImage, normalizeAudioUrl, trackFromFile, listFolderTracks, startTournament, startPlayoffs, resetTournament,
   openMatch, closeMatch, reopenMatch, setWinner, openMany, closeAllLive, countVotes,
 } from '../lib/api.js';
 import { isPowerOfTwo } from '../lib/tournament.js';
@@ -141,6 +141,69 @@ function UploadButton({ folder, accept, onDone, label }) {
   );
 }
 
+/** Импорт mp3 из папки public/tracks: название, артист и обложка берутся из тегов файла */
+function FolderImport() {
+  const { tracks } = useData();
+  const toast = useToast();
+  const [files, setFiles] = useState(null);
+  const [progress, setProgress] = useState(null);
+
+  const load = () => listFolderTracks().then(setFiles).catch(() => setFiles([]));
+  useEffect(() => {
+    load();
+  }, []);
+
+  const added = new Set(tracks.map((t) => t.audioUrl));
+  const fresh = (files ?? []).filter((f) => !added.has(f.audioUrl));
+
+  const importAll = async () => {
+    setProgress(0);
+    let ok = 0;
+    for (const [i, f] of fresh.entries()) {
+      try {
+        await saveTrack(null, await trackFromFile(f.audioUrl));
+        ok++;
+      } catch (err) {
+        toast(`${f.name}: ${err.message}`, 'error');
+      }
+      setProgress((i + 1) / fresh.length);
+    }
+    setProgress(null);
+    toast(`Добавлено треков: ${ok}`);
+  };
+
+  return (
+    <div className="card" style={{ marginBottom: 22 }}>
+      <div className="section__head" style={{ marginBottom: 10 }}>
+        <div>
+          <h3 style={{ fontSize: 20 }}>Папка public/tracks</h3>
+          <p className="tiny" style={{ margin: '6px 0 0' }}>
+            Скиньте mp3 в папку — название, артист и обложка возьмутся из самого файла. Новые файлы видны после перезапуска <code>npm run dev</code>.
+          </p>
+        </div>
+        <div className="row">
+          <button className="btn btn--ghost btn--sm" onClick={load} disabled={progress != null}>Обновить</button>
+          <button className="btn btn--pink" onClick={importAll} disabled={!fresh.length || progress != null}>
+            {progress != null ? `Добавляем… ${Math.round(progress * 100)}%` : `Добавить новые (${fresh.length})`}
+          </button>
+        </div>
+      </div>
+      {progress != null && <div className="progress" style={{ marginBottom: 12 }}><span style={{ width: `${progress * 100}%` }} /></div>}
+      {files?.length ? (
+        <div className="row" style={{ gap: 8 }}>
+          {files.map((f) => (
+            <span key={f.name} className={`badge ${added.has(f.audioUrl) ? 'badge--done' : 'badge--ready'}`} style={{ textTransform: 'none', letterSpacing: 0 }}>
+              {added.has(f.audioUrl) && <Icon.check />} {f.name}
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="muted" style={{ margin: 0 }}>{files ? 'В папке пока нет аудиофайлов.' : 'Загружаем список…'}</p>
+      )}
+    </div>
+  );
+}
+
 function TracksAdmin() {
   const { tracks, tournament } = useData();
   const [form, setForm] = useState(EMPTY);
@@ -149,6 +212,19 @@ function TracksAdmin() {
   const toast = useToast();
   const locked = tournament?.stage && tournament.stage !== 'setup';
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: typeof e === 'string' ? e : e.target.value }));
+
+  // Пустые поля (название, артист, обложка) заполняются из тегов указанного файла
+  const fillFromFile = async (url = form.audioUrl) => {
+    if (!url.trim()) return;
+    const meta = await trackFromFile(url).catch(() => null);
+    if (!meta) return;
+    setForm((f) => ({
+      ...f,
+      title: f.title || meta.title,
+      artist: f.artist || meta.artist,
+      coverUrl: f.coverUrl || meta.coverUrl,
+    }));
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -166,6 +242,8 @@ function TracksAdmin() {
   };
 
   return (
+    <>
+    <FolderImport />
     <div className="admin-grid">
       <form className="card" onSubmit={submit}>
         <h3 style={{ fontSize: 20, marginBottom: 18 }}>{editing ? 'Редактировать трек' : 'Новый трек'}</h3>
@@ -179,12 +257,13 @@ function TracksAdmin() {
         </div>
         <div className="field">
           <label>Ссылка на аудио (mp3 / m4a / ogg)</label>
-          <input className="input" value={form.audioUrl} onChange={set('audioUrl')} required placeholder="/tracks/песня.mp3 или https://…/track.mp3" />
+          <input className="input" value={form.audioUrl} onChange={set('audioUrl')} onBlur={() => fillFromFile()} required placeholder="/tracks/песня.mp3 или https://…/track.mp3" />
           <div className="row">
-            <UploadButton folder="audio" accept="audio/*" label={<><Icon.upload /> Загрузить файл</>} onDone={set('audioUrl')} />
+            <UploadButton folder="audio" accept="audio/*" label={<><Icon.upload /> Загрузить файл</>} onDone={(url) => { set('audioUrl')(url); fillFromFile(url); }} />
           </div>
           <span className="tiny">
-            Бесплатный способ: положите mp3 в папку проекта <code>public/tracks</code> и впишите <code>/tracks/имя_файла.mp3</code>.
+            Бесплатный способ: положите mp3 в папку проекта <code>public/tracks</code> и впишите <code>/tracks/имя_файла.mp3</code> —
+            пустые поля и обложка заполнятся из тегов файла.
             Подойдут и прямые ссылки (Dropbox преобразуется автоматически). Ссылки на Яндекс Диск, ВК и YouTube не работают.
           </span>
         </div>
@@ -234,6 +313,7 @@ function TracksAdmin() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
