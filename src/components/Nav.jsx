@@ -8,7 +8,7 @@ import { Icon, spring } from './ui.jsx';
 export default function Nav() {
   const { isAdmin, matches, tournament } = useData();
   const live = matches.some((m) => m.status === 'live');
-  const hasGroups = tournament?.groups?.length > 0;
+  const hasGroups = tournament?.groups?.length > 0 || Boolean(tournament?.swiss);
 
   const links = [
     { to: '/', label: 'Главная', icon: Icon.home, end: true },

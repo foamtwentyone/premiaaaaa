@@ -7,7 +7,7 @@ import {
   saveTrack, deleteTrack, uploadFile, compressImage, normalizeAudioUrl, trackFromFile, listFolderTracks, startTournament, startPlayoffs, resetTournament,
   openMatch, closeMatch, reopenMatch, setWinner, openMany, closeAllLive, countVotes,
 } from '../lib/api.js';
-import { isPowerOfTwo } from '../lib/tournament.js';
+import { isPowerOfTwo, swissWinOptions, swissMatchCount, swissFinished } from '../lib/tournament.js';
 import AudioPlayer from '../components/AudioPlayer.jsx';
 import { Cover, Empty, StatusBadge, Icon, useToast, spring } from '../components/ui.jsx';
 
@@ -323,32 +323,50 @@ function TournamentAdmin() {
   const { tracks, tournament, matches } = useData();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [cfg, setCfg] = useState({ useGroups: true, groupCount: 2, upperCount: 4, mode: 'ti', shuffle: true });
+  const [cfg, setCfg] = useState({ format: 'swiss', swissWins: 3, groupCount: 2, upperCount: 4, mode: 'ti', shuffle: true });
   const stage = tournament?.stage ?? 'setup';
   const n = tracks.length;
+  const swiss = cfg.format === 'swiss';
+  const winOptions = swissWinOptions(n);
+  // В швейцарке проходит ровно половина: TI — четверть в верхнюю и четверть в нижнюю, классика — половина в верхнюю
+  const swissWins = winOptions.includes(cfg.swissWins) ? cfg.swissWins : winOptions[Math.min(1, winOptions.length - 1)];
+  const upperCount = swiss ? (cfg.mode === 'ti' ? n / 4 : n / 2) : cfg.upperCount;
+  const useGroups = cfg.format !== 'none';
 
   const plan = useMemo(() => {
-    const lower = cfg.mode === 'ti' ? cfg.upperCount : 0;
-    const qualified = cfg.upperCount + lower;
+    const lower = cfg.mode === 'ti' ? upperCount : 0;
+    const qualified = upperCount + lower;
     const errors = [];
+    if (swiss) {
+      if (!winOptions.length) {
+        errors.push(`Для швейцарки нужно 8, 16 или 32 трека (сейчас ${n}). Добавьте или уберите треки, либо выберите другой формат.`);
+      }
+      const perTrack = 2 * swissWins - 1;
+      return {
+        lower, qualified, errors, perTrack,
+        groupMatches: winOptions.length ? swissMatchCount(n, swissWins) : 0,
+        playoffMatches: winOptions.length ? (cfg.mode === 'ti' ? 3 * upperCount - 2 : 2 * upperCount - 2) : 0,
+        out: winOptions.length ? n / 2 : 0,
+      };
+    }
     if (!isPowerOfTwo(cfg.upperCount)) errors.push('Размер верхней сетки должен быть степенью двойки');
     if (cfg.mode === 'classic' && cfg.upperCount < 4) errors.push('Для классической сетки нужно минимум 4 трека');
-    if (cfg.useGroups) {
+    if (useGroups) {
       if (n < cfg.groupCount * 2) errors.push(`Нужно минимум ${cfg.groupCount * 2} трека для ${cfg.groupCount} групп`);
       if (qualified > n) errors.push(`В плей-офф проходят ${qualified}, а треков всего ${n}`);
     } else if (n < qualified) {
       errors.push(`Без групп нужно ровно ${qualified} треков (сейчас ${n}). Лишние не попадут в турнир.`);
     }
-    const perGroup = cfg.useGroups ? Math.ceil(n / cfg.groupCount) : 0;
-    const groupMatches = cfg.useGroups
+    const perGroup = useGroups ? Math.ceil(n / cfg.groupCount) : 0;
+    const groupMatches = useGroups
       ? Array.from({ length: cfg.groupCount }, (_, i) => {
           const size = Math.floor(n / cfg.groupCount) + (i < n % cfg.groupCount ? 1 : 0);
           return (size * (size - 1)) / 2;
         }).reduce((a, b) => a + b, 0)
       : 0;
     const playoffMatches = cfg.mode === 'ti' ? 3 * cfg.upperCount - 2 : 2 * cfg.upperCount - 2;
-    return { lower, qualified, errors, perGroup, groupMatches, playoffMatches, out: cfg.useGroups ? Math.max(0, n - qualified) : Math.max(0, n - qualified) };
-  }, [cfg, n]);
+    return { lower, qualified, errors, perGroup, groupMatches, playoffMatches, out: Math.max(0, n - qualified) };
+  }, [cfg, n, swiss, swissWins, upperCount, useGroups, winOptions.length]);
 
   const run = async (fn, ok) => {
     setBusy(true);
@@ -363,7 +381,13 @@ function TournamentAdmin() {
   };
 
   const groupDone = matches.filter((m) => m.stage === 'group');
-  const allGroupDone = groupDone.length > 0 && groupDone.every((m) => m.status === 'done');
+  const runningSwiss = tournament?.swiss?.trackIds && tournament?.config?.swissWins;
+  const allGroupDone = runningSwiss
+    ? swissFinished(tournament.swiss.trackIds, groupDone, tournament.config.swissWins)
+    : groupDone.length > 0 && groupDone.every((m) => m.status === 'done');
+  // В швейцарке туры появляются по ходу, поэтому общее число боёв считаем заранее
+  const groupTotal = runningSwiss ? swissMatchCount(tournament.swiss.trackIds.length, tournament.config.swissWins) : groupDone.length;
+  const groupPlayed = groupDone.filter((m) => m.status === 'done').length;
   const set = (k, v) => setCfg((c) => ({ ...c, [k]: v }));
 
   return (
@@ -375,16 +399,37 @@ function TournamentAdmin() {
         <div className="field">
           <span className="label">Групповой этап</span>
           <div className="toggle">
-            {[[true, 'С группами'], [false, 'Сразу плей-офф']].map(([v, l]) => (
-              <button key={l} type="button" className={cfg.useGroups === v ? 'is-on' : ''} onClick={() => set('useGroups', v)}>
-                {cfg.useGroups === v && <motion.span layoutId="cfg-groups" className="toggle__pill" transition={spring} />}
+            {[['swiss', 'Швейцарка (как TI)'], ['groups', 'Группы'], ['none', 'Сразу плей-офф']].map(([v, l]) => (
+              <button key={v} type="button" className={cfg.format === v ? 'is-on' : ''} onClick={() => set('format', v)}>
+                {cfg.format === v && <motion.span layoutId="cfg-groups" className="toggle__pill" transition={spring} />}
                 {l}
               </button>
             ))}
           </div>
+          <span className="tiny">
+            {swiss
+              ? `В каждом туре встречаются треки с одинаковым счётом. ${swissWins ?? 3} победы — проход, ${swissWins ?? 3} поражения — вылет. У трека максимум ${plan.perTrack ?? 5} боёв.`
+              : cfg.format === 'groups'
+                ? 'Каждый трек играет с каждым в своей группе — боёв заметно больше.'
+                : 'Без группового этапа: треки сразу попадают в сетку.'}
+          </span>
         </div>
 
-        {cfg.useGroups && (
+        {swiss && winOptions.length > 1 && (
+          <div className="field">
+            <span className="label">Побед для выхода (и поражений для вылета)</span>
+            <div className="toggle">
+              {winOptions.map((v) => (
+                <button key={v} type="button" className={swissWins === v ? 'is-on' : ''} onClick={() => set('swissWins', v)}>
+                  {swissWins === v && <motion.span layoutId="cfg-sw" className="toggle__pill" transition={spring} />}
+                  {v}-0
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {cfg.format === 'groups' && (
           <div className="field">
             <span className="label">Количество групп</span>
             <div className="toggle">
@@ -415,7 +460,7 @@ function TournamentAdmin() {
           </span>
         </div>
 
-        <div className="field">
+        {!swiss && <div className="field">
           <span className="label">Треков в верхней сетке</span>
           <div className="toggle">
             {[2, 4, 8, 16].map((v) => (
@@ -425,7 +470,7 @@ function TournamentAdmin() {
               </button>
             ))}
           </div>
-        </div>
+        </div>}
 
         <label className="row" style={{ cursor: 'pointer', marginBottom: 8 }}>
           <input type="checkbox" checked={cfg.shuffle} onChange={(e) => set('shuffle', e.target.checked)} />
@@ -435,10 +480,11 @@ function TournamentAdmin() {
 
         <div className="summary">
           <div><b>{n}</b><span>треков</span></div>
-          {cfg.useGroups && <div><b>{cfg.groupCount}×{plan.perGroup}</b><span>групп × треков</span></div>}
-          <div><b>{cfg.upperCount}</b><span>в верхней сетке</span></div>
+          {cfg.format === 'groups' && <div><b>{cfg.groupCount}×{plan.perGroup}</b><span>групп × треков</span></div>}
+          {swiss && <div><b>{plan.groupMatches}</b><span>боёв в швейцарке</span></div>}
+          <div><b>{upperCount || '—'}</b><span>в верхней сетке</span></div>
           {plan.lower > 0 && <div><b>{plan.lower}</b><span>в нижней сетке</span></div>}
-          <div><b>{plan.out}</b><span>{cfg.useGroups ? 'вылетят в группах' : 'не участвуют'}</span></div>
+          <div><b>{plan.out}</b><span>{useGroups ? 'вылетят в группах' : 'не участвуют'}</span></div>
           <div><b>{plan.groupMatches + plan.playoffMatches}</b><span>боёв всего</span></div>
         </div>
 
@@ -449,7 +495,8 @@ function TournamentAdmin() {
           disabled={busy || plan.errors.length > 0}
           onClick={() => {
             if (stage !== 'setup' && !confirm('Турнир уже запущен. Начать заново? Все бои и голоса будут удалены.')) return;
-            run(() => startTournament(tracks.map((t) => t.id), cfg), 'Турнир запущен!');
+            const config = { ...cfg, useGroups, upperCount, swissWins: swiss ? swissWins : null };
+            run(() => startTournament(tracks.map((t) => t.id), config), 'Турнир запущен!');
           }}
         >
           {stage === 'setup' ? 'Запустить турнир' : 'Перезапустить с этими настройками'}
@@ -469,9 +516,12 @@ function TournamentAdmin() {
         {stage === 'groups' && (
           <div style={{ marginTop: 18 }}>
             <div className="progress" style={{ marginBottom: 10 }}>
-              <span style={{ width: `${(groupDone.filter((m) => m.status === 'done').length / Math.max(1, groupDone.length)) * 100}%` }} />
+              <span style={{ width: `${(groupPlayed / Math.max(1, groupTotal)) * 100}%` }} />
             </div>
-            <p className="tiny">Групповых боёв сыграно: {groupDone.filter((m) => m.status === 'done').length} из {groupDone.length}</p>
+            <p className="tiny">
+              Групповых боёв сыграно: {groupPlayed} из {groupTotal}
+              {runningSwiss && !allGroupDone ? '. Следующий тур швейцарки появится сам, как только закроете все бои текущего.' : ''}
+            </p>
             <button className="btn btn--lime btn--block" disabled={busy || !allGroupDone} onClick={() => run(() => startPlayoffs(tournament), 'Плей-офф сформирован!')}>
               Сформировать плей-офф
             </button>

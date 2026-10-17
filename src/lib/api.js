@@ -7,6 +7,7 @@ import { readTags, guessFromFilename } from './id3.js';
 import { db, storage } from './firebase.js';
 import {
   splitIntoGroups, buildGroupMatches, seedsFromGroups, buildPlayoffs, resolveSlots, decide, champion,
+  buildSwissRound1, nextSwissRound, seedsFromSwiss,
 } from './tournament.js';
 
 const TOURNAMENT = () => doc(db, 'tournament', 'main');
@@ -193,15 +194,24 @@ function shuffle(list) {
   return a;
 }
 
+/** Формат группового этапа (старые турниры хранили только useGroups) */
+export const groupFormat = (config) => config?.format ?? (config?.useGroups ? 'groups' : 'none');
+
 /**
- * config: { useGroups, groupCount, upperCount, mode: 'ti'|'classic', shuffle }
+ * config: { format: 'swiss'|'groups'|'none', swissWins, groupCount, upperCount, mode: 'ti'|'classic', shuffle }
  */
 export async function startTournament(trackIds, config) {
   const ids = config.shuffle ? shuffle(trackIds) : trackIds;
   const old = await loadMatches();
   await deleteVotesFor(old.map((m) => m.id));
+  const format = groupFormat(config);
 
-  if (config.useGroups) {
+  if (format === 'swiss') {
+    await writeMatches(buildSwissRound1(ids), old.map((m) => m.id));
+    await setDoc(TOURNAMENT(), {
+      stage: 'groups', config, groups: [], swiss: { trackIds: ids }, championId: null, startedAt: serverTimestamp(),
+    });
+  } else if (format === 'groups') {
     const groups = splitIntoGroups(ids, config.groupCount);
     await writeMatches(buildGroupMatches(groups), old.map((m) => m.id));
     await setDoc(TOURNAMENT(), {
@@ -221,8 +231,11 @@ export async function startPlayoffs(tournament) {
   const all = await loadMatches();
   const groupMatches = all.filter((m) => m.stage === 'group');
   if (groupMatches.some((m) => m.status !== 'done')) throw new Error('Сначала завершите все бои группового этапа');
-  const { upperCount, mode } = tournament.config;
-  const seeds = seedsFromGroups(tournament.groups, groupMatches);
+  const { upperCount, mode, swissWins } = tournament.config;
+  const seeds =
+    groupFormat(tournament.config) === 'swiss'
+      ? seedsFromSwiss(tournament.swiss.trackIds, groupMatches, swissWins)
+      : seedsFromGroups(tournament.groups, groupMatches);
   const upper = seeds.slice(0, upperCount);
   const lower = mode === 'ti' ? seeds.slice(upperCount, upperCount * 2) : [];
   const old = all.filter((m) => m.stage !== 'group');
@@ -260,9 +273,15 @@ async function commitWithPropagation(all, changedId) {
   const resetIds = changed.filter((m) => m.id !== changedId && !m.result).map((m) => m.id);
   await deleteVotesFor(resetIds);
   await writeMatches(changed);
-  const champ = champion(resolved);
   const t = await getDoc(TOURNAMENT());
-  if (t.exists() && t.data().stage !== 'groups') {
+  const tour = t.exists() ? t.data() : null;
+  // Швейцарка: как только тур сыгран целиком — сразу формируем следующий
+  if (tour?.stage === 'groups' && groupFormat(tour.config) === 'swiss') {
+    const round = nextSwissRound(tour.swiss.trackIds, next.filter((m) => m.stage === 'group'), tour.config.swissWins);
+    if (round) await writeMatches(round);
+  }
+  const champ = champion(resolved);
+  if (tour && tour.stage !== 'groups') {
     await updateDoc(TOURNAMENT(), { stage: champ ? 'finished' : 'playoffs', championId: champ });
   }
 }
@@ -292,8 +311,18 @@ export async function setWinner(id, winner) {
 
 /** Вернуть бой в состояние «готов» (результат и голоса сохраняются до нового закрытия). */
 export async function reopenMatch(id) {
-  const all = await loadMatches();
+  let all = await loadMatches();
   const m = all.find((x) => x.id === id);
+  // В швейцарке пары следующего тура зависят от этого результата: несыгранный следующий тур удаляем
+  if (m.group === 'S') {
+    const later = all.filter((x) => x.group === 'S' && x.round > m.round);
+    if (later.some((x) => x.status === 'done')) {
+      throw new Error('Следующий тур швейцарки уже сыгран — отменить можно только результаты последнего тура');
+    }
+    await deleteVotesFor(later.map((x) => x.id));
+    await writeMatches([], later.map((x) => x.id));
+    all = all.filter((x) => !later.includes(x));
+  }
   m.status = 'ready';
   delete m.result;
   m.endsAt = null;

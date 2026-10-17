@@ -127,6 +127,142 @@ export function seedsFromGroups(groups, matches) {
   return seeds;
 }
 
+/* ===================== Швейцарская система (как групповой этап TI) =====================
+ * В каждом туре встречаются треки с одинаковым счётом (2-1 против 2-1 и т.д.).
+ * Набрал `wins` побед — проходит в плей-офф, набрал столько же поражений — вылетает.
+ * При 16 треках и 3 победах: 5 туров, максимум 5 боёв на трек, ровно 8 проходят дальше.
+ */
+
+/** Допустимое число побед для выхода: от 2 до log2(N)-1 (при большем числе группы станут нечётными) */
+export function swissWinOptions(n) {
+  if (!isPowerOfTwo(n) || n < 8) return [];
+  const max = Math.log2(n) - 1;
+  return Array.from({ length: max - 1 }, (_, i) => i + 2);
+}
+
+/** Сколько боёв будет в швейцарке (симуляция с одинаковыми результатами по счёту) */
+export function swissMatchCount(n, wins) {
+  let buckets = new Map([['0-0', n]]);
+  let total = 0;
+  while (buckets.size) {
+    const next = new Map();
+    for (const [key, count] of buckets) {
+      const [w, l] = key.split('-').map(Number);
+      total += count / 2;
+      for (const [k, c] of [[`${w + 1}-${l}`, count / 2], [`${w}-${l + 1}`, count / 2]]) {
+        const [nw, nl] = k.split('-').map(Number);
+        if (nw < wins && nl < wins) next.set(k, (next.get(k) ?? 0) + c);
+      }
+    }
+    buckets = next;
+  }
+  return total;
+}
+
+/** Таблица швейцарки: счёт, разница средних баллов, соперники, статус */
+export function swissStandings(trackIds, matches, wins) {
+  const rows = new Map(
+    trackIds.map((id, seed) => [id, { trackId: id, seed, wins: 0, losses: 0, diff: 0, scoreSum: 0, played: 0, opponents: [] }]),
+  );
+  for (const m of matches) {
+    if (m.stage !== 'group' || m.status !== 'done' || !m.result) continue;
+    const a = rows.get(m.trackA);
+    const b = rows.get(m.trackB);
+    if (!a || !b) continue;
+    const { avgA, avgB, winner } = m.result;
+    a.opponents.push(b.trackId); b.opponents.push(a.trackId);
+    a.played++; b.played++;
+    a.scoreSum += avgA; b.scoreSum += avgB;
+    a.diff += avgA - avgB; b.diff += avgB - avgA;
+    if (winner === a.trackId) { a.wins++; b.losses++; } else { b.wins++; a.losses++; }
+  }
+  const list = [...rows.values()].map((r) => ({
+    ...r,
+    avg: r.played ? r.scoreSum / r.played : 0,
+    status: r.wins >= wins ? 'qualified' : r.losses >= wins ? 'eliminated' : 'active',
+  }));
+  // Прошедшие — по меньшему числу поражений (3-0 выше 3-2), вылетевшие — по числу побед
+  const rank = (r) => (r.status === 'qualified' ? 0 : r.status === 'active' ? 1 : 2);
+  return list.sort(
+    (x, y) =>
+      rank(x) - rank(y) ||
+      (x.status === 'qualified' ? x.losses - y.losses : y.wins - x.wins) ||
+      x.losses - y.losses ||
+      y.diff - x.diff ||
+      y.avg - x.avg ||
+      x.seed - y.seed,
+  );
+}
+
+/** Сиды плей-офф: таблица швейцарки сверху вниз */
+export const seedsFromSwiss = (trackIds, matches, wins) => swissStandings(trackIds, matches, wins).map((r) => r.trackId);
+
+/** Пары следующего тура: внутри одинакового счёта, без повторных встреч, если это возможно */
+export function swissPairs(standings) {
+  const active = standings.filter((r) => r.status === 'active');
+  // Порядок: лучший счёт выше; внутри — по разнице баллов и посеву
+  active.sort((x, y) => y.wins - x.wins || x.losses - y.losses || y.diff - x.diff || x.seed - y.seed);
+  const bucketOf = (r) => `${r.wins}-${r.losses}`;
+
+  const solve = (pool, allowRematch) => {
+    if (!pool.length) return [];
+    const [first, ...rest] = pool;
+    // Сначала — соперники с тем же счётом из «нижней половины» корзины (как 1 против 8 по силе)
+    const same = rest.filter((r) => bucketOf(r) === bucketOf(first));
+    const candidates = [...same.slice(Math.floor(same.length / 2)), ...same.slice(0, Math.floor(same.length / 2)), ...rest.filter((r) => bucketOf(r) !== bucketOf(first))];
+    for (const c of candidates) {
+      if (!allowRematch && first.opponents.includes(c.trackId)) continue;
+      const tail = solve(rest.filter((r) => r !== c), allowRematch);
+      if (tail) return [[first, c], ...tail];
+    }
+    return null;
+  };
+  const pairs = solve(active, false) ?? solve(active, true) ?? [];
+  return pairs.map(([a, b]) => [a.trackId, b.trackId]);
+}
+
+const swissMatch = (round, i, a, b, bucket) => ({
+  id: `sw-r${round}-m${i + 1}`,
+  stage: 'group',
+  group: 'S',
+  round,
+  order: i,
+  bucket,
+  label: `Тур ${round} · ${bucket}`,
+  slotA: { type: 'seed', trackId: a },
+  slotB: { type: 'seed', trackId: b },
+  trackA: a,
+  trackB: b,
+  status: 'ready',
+});
+
+/** Первый тур: 1-й сид против (N/2+1)-го и т.д. */
+export function buildSwissRound1(trackIds) {
+  const half = trackIds.length / 2;
+  return trackIds.slice(0, half).map((a, i) => swissMatch(1, i, a, trackIds[half + i], '0-0'));
+}
+
+/** Следующий тур, когда текущий полностью сыгран; null — если тур ещё идёт или швейцарка окончена */
+export function nextSwissRound(trackIds, matches, wins) {
+  const group = matches.filter((m) => m.stage === 'group');
+  if (!group.length || group.some((m) => m.status !== 'done')) return null;
+  const standings = swissStandings(trackIds, group, wins);
+  const pairs = swissPairs(standings);
+  if (!pairs.length) return null;
+  const round = Math.max(...group.map((m) => m.round)) + 1;
+  const byId = new Map(standings.map((r) => [r.trackId, r]));
+  return pairs.map(([a, b], i) => {
+    const ra = byId.get(a);
+    const rb = byId.get(b);
+    const bucket = `${ra.wins}-${ra.losses}` === `${rb.wins}-${rb.losses}` ? `${ra.wins}-${ra.losses}` : `${ra.wins}-${ra.losses} / ${rb.wins}-${rb.losses}`;
+    return swissMatch(round, i, a, b, bucket);
+  });
+}
+
+/** Швейцарка закончена: у всех нужное число побед или поражений */
+export const swissFinished = (trackIds, matches, wins) =>
+  swissStandings(trackIds, matches, wins).every((r) => r.status !== 'active');
+
 /**
  * Генерация сетки double elimination.
  * @param upperSeeds  треки, стартующие в верхней сетке (степень двойки, >= 2), по силе
