@@ -1876,3 +1876,165 @@ h4 {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Итоговая таблица ---------- */
+
+.standings {
+  padding: 14px;
+}
+
+.standings__head,
+.standings__row {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 200px 64px 84px;
+  align-items: center;
+  gap: 12px;
+}
+
+.standings__head {
+  padding: 4px 12px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-3);
+}
+
+.standings__row {
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: var(--surface-2);
+  margin-top: 6px;
+}
+
+.standings__row.is-gold { background: linear-gradient(90deg, #fff1bf, var(--surface-2) 70%); }
+.standings__row.is-silver { background: linear-gradient(90deg, #eceaf5, var(--surface-2) 70%); }
+.standings__row.is-bronze { background: linear-gradient(90deg, #ffe0cc, var(--surface-2) 70%); }
+
+.standings__place {
+  justify-self: start;
+  min-width: 44px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 14px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 3px 0 var(--line);
+  white-space: nowrap;
+}
+
+.standings__place svg { font-size: 20px; }
+.standings__place--gold { background: var(--yellow); box-shadow: 0 3px 0 var(--yellow-d); }
+.standings__place--silver { background: #d9d6e8; box-shadow: 0 3px 0 #b3aecb; }
+.standings__place--bronze { background: var(--orange); color: #fff; box-shadow: 0 3px 0 var(--orange-d); }
+
+.standings__track {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.standings__track .cover {
+  width: 44px;
+  border-radius: 12px;
+  font-size: 9px;
+}
+
+.standings__track > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.standings__track b,
+.standings__track small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.standings__stage {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.standings__stage-inline {
+  display: none;
+  color: var(--purple-d);
+  font-weight: 800;
+}
+
+.standings .num {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
+.standings__avg {
+  font-family: var(--font-display);
+  font-size: 17px;
+}
+
+@media (max-width: 720px) {
+  .standings {
+    padding: 8px;
+  }
+
+  .standings__head,
+  .standings__row {
+    grid-template-columns: 54px minmax(0, 1fr) 40px 48px;
+    gap: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  .standings__place {
+    min-width: 0;
+    width: 100%;
+    padding: 0 4px;
+    font-size: 12px;
+  }
+
+  .standings__track {
+    gap: 8px;
+  }
+
+  .standings__track .cover {
+    width: 34px;
+    border-radius: 10px;
+    font-size: 6.5px;
+  }
+
+  /* На телефоне название переносится, а не обрезается */
+  .standings__track b {
+    white-space: normal;
+    line-height: 1.15;
+    font-size: 14px;
+  }
+
+  .standings__track small {
+    font-size: 12px;
+  }
+
+  .standings__stage {
+    display: none;
+  }
+
+  .standings__stage-inline {
+    display: block;
+  }
+
+  .standings .num {
+    font-size: 13px;
+  }
+
+  .standings__avg {
+    font-size: 14px;
+  }
+}

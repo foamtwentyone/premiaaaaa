@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useData } from '../lib/store.jsx';
 import { placements } from '../lib/tournament.js';
 import MatchCard from '../components/MatchCard.jsx';
+import FinalStandings from '../components/FinalStandings.jsx';
 import { Cover, CountUp, Icon, stagger, pop, softSpring, spring } from '../components/ui.jsx';
 
 const STAGE_TEXT = {
@@ -144,6 +145,8 @@ export default function Home() {
           )}
         </motion.section>
       )}
+
+      {stage === 'finished' && <FinalStandings />}
 
       {live.length > 0 && (
         <section className="section">

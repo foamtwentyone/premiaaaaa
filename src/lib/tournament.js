@@ -472,3 +472,84 @@ export function currentRanking(trackIds, matches) {
     )
     .map((s) => s.id);
 }
+
+/**
+ * Итоговая таблица всего турнира.
+ * Места — как на TI: 1–2 по гранд-финалу, дальше по раунду вылета из нижней сетки,
+ * затем вылетевшие на групповом этапе (по числу побед в швейцарке или месту в группе).
+ * Треки, вылетевшие на одной стадии, делят место («5–6»), внутри — по среднему баллу.
+ * При досрочном завершении — по текущему рейтингу, чемпион первым.
+ */
+export function finalStandings(matches, { groups = [], championId = null } = {}) {
+  const done = matches.filter((m) => m.status === 'done' && m.result);
+  const ids = [...new Set(matches.flatMap((m) => [m.trackA, m.trackB]).filter(Boolean))];
+  const stats = new Map(ids.map((id) => [id, { trackId: id, wins: 0, losses: 0, scoreSum: 0, played: 0, groupWins: 0, groupLosses: 0 }]));
+  for (const m of done) {
+    const { winner, avgA, avgB } = m.result;
+    for (const [id, avg] of [[m.trackA, avgA], [m.trackB, avgB]]) {
+      const s = stats.get(id);
+      if (!s) continue;
+      s.played++;
+      s.scoreSum += avg;
+      const won = winner === id;
+      if (won) s.wins++; else s.losses++;
+      if (m.stage === 'group') { if (won) s.groupWins++; else s.groupLosses++; }
+    }
+  }
+  const row = (id) => {
+    const s = stats.get(id);
+    return { ...s, avg: s.played ? s.scoreSum / s.played : 0 };
+  };
+  const byAvg = (a, b) => b.avg - a.avg || b.wins - a.wins || a.losses - b.losses;
+
+  // Группы мест: [{ stage, ids }] сверху вниз
+  const tiers = [];
+  const gf = done.find((m) => m.id === 'gf');
+  const playoffIds = new Set(matches.filter((m) => m.stage !== 'group').flatMap((m) => [m.trackA, m.trackB]).filter(Boolean));
+
+  if (gf) {
+    tiers.push({ stage: 'Чемпион', ids: [gf.result.winner] });
+    tiers.push({ stage: 'Гранд-финал', ids: [gf.result.loser] });
+    const lower = done.filter((m) => m.stage === 'lower');
+    const maxRound = Math.max(0, ...lower.map((m) => m.round));
+    for (let r = maxRound; r >= 1; r--) {
+      const ms = lower.filter((m) => m.round === r);
+      if (ms.length) tiers.push({ stage: ms[0].label, ids: ms.map((m) => m.result.loser) });
+    }
+  } else {
+    // Досрочное завершение или турнир ещё идёт: чемпион (если назначен) и дальше по рейтингу
+    const ranking = currentRanking(ids, matches).filter((id) => id !== championId);
+    if (championId) tiers.push({ stage: 'Чемпион', ids: [championId] });
+    const rest = ranking.filter((id) => playoffIds.has(id));
+    rest.forEach((id) => tiers.push({ stage: 'Плей-офф', ids: [id] }));
+  }
+
+  // Вылетевшие на групповом этапе
+  const placed = new Set(tiers.flatMap((t) => t.ids));
+  const groupOut = ids.filter((id) => !placed.has(id) && !playoffIds.has(id));
+  if (groupOut.length) {
+    if (groups.length) {
+      // Круговые группы: по месту в своей группе
+      const posOf = new Map();
+      for (const g of groups) groupStandings(g, matches).forEach((r, i) => posOf.set(r.trackId, i));
+      const positions = [...new Set(groupOut.map((id) => posOf.get(id) ?? 99))].sort((a, b) => a - b);
+      positions.forEach((pos) => tiers.push({ stage: 'Групповой этап', ids: groupOut.filter((id) => (posOf.get(id) ?? 99) === pos) }));
+    } else {
+      // Швейцарка: по числу побед (2-3 выше 1-3 и 0-3)
+      const winsList = [...new Set(groupOut.map((id) => stats.get(id).groupWins))].sort((a, b) => b - a);
+      winsList.forEach((w) => tiers.push({ stage: 'Групповой этап', ids: groupOut.filter((id) => stats.get(id).groupWins === w) }));
+    }
+  }
+  // Кто ещё не распределён (например, турнир не завершён) — в конец по рейтингу
+  const left = ids.filter((id) => !tiers.some((t) => t.ids.includes(id)));
+  if (left.length) currentRanking(left, matches).forEach((id) => tiers.push({ stage: 'Плей-офф', ids: [id] }));
+
+  const out = [];
+  let place = 1;
+  for (const t of tiers) {
+    const label = t.ids.length > 1 ? `${place}–${place + t.ids.length - 1}` : `${place}`;
+    t.ids.map(row).sort(byAvg).forEach((r) => out.push({ ...r, place: label, placeNum: place, stage: t.stage }));
+    place += t.ids.length;
+  }
+  return out;
+}

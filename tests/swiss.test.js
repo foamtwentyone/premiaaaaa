@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   swissWinOptions, swissMatchCount, swissStandings, buildSwissRound1, nextSwissRound, swissFinished,
-  seedsFromSwiss, buildPlayoffs, resolveSlots, decide, champion,
+  seedsFromSwiss, buildPlayoffs, resolveSlots, decide, champion, finalStandings,
 } from '../src/lib/tournament.js';
 
 const ids = (n) => Array.from({ length: n }, (_, i) => `t${i + 1}`);
@@ -74,4 +74,39 @@ test('швейцарка → плей-офф TI → чемпион', () => {
     po = resolveSlots(po.map((x) => (x.id === m.id ? { ...x, status: 'done', result: decide(x, [{ matchId: x.id, a: aWins ? 9 : 1, b: aWins ? 1 : 9 }]) } : x)));
   }
   assert.equal(champion(po), 't1');
+});
+
+test('итоговая таблица: швейцарка + плей-офф TI', () => {
+  const t = ids(16);
+  const beats = (a, b) => t.indexOf(a) < t.indexOf(b);
+  const sw = playSwiss(t, 3, beats);
+  const seeds = seedsFromSwiss(t, sw, 3);
+  let po = buildPlayoffs(seeds.slice(0, 4), seeds.slice(4, 8));
+  for (let i = 0; i < 40; i++) {
+    const m = po.find((x) => x.status === 'ready');
+    if (!m) break;
+    const aWins = beats(m.trackA, m.trackB);
+    po = resolveSlots(po.map((x) => (x.id === m.id ? { ...x, status: 'done', result: decide(x, [{ matchId: x.id, a: aWins ? 9 : 1, b: aWins ? 1 : 9 }]) } : x)));
+  }
+  const table = finalStandings([...sw, ...po]);
+  assert.equal(table.length, 16, 'все треки в таблице');
+  assert.equal(new Set(table.map((r) => r.trackId)).size, 16);
+  assert.equal(table[0].trackId, 't1');
+  assert.equal(table[0].stage, 'Чемпион');
+  assert.equal(table[1].place, '2');
+  // 8 вылетевших в швейцарке — внизу, с групповым этапом
+  assert.ok(table.slice(8).every((r) => r.stage === 'Групповой этап'));
+  assert.ok(table.slice(0, 8).every((r) => r.stage !== 'Групповой этап'));
+  // места не убывают
+  for (let i = 1; i < table.length; i++) assert.ok(table[i].placeNum >= table[i - 1].placeNum);
+  // разделённые места: несколько треков с одинаковым диапазоном
+  assert.ok(table.some((r) => r.place.includes('–')));
+});
+
+test('итоговая таблица при досрочном завершении', () => {
+  const t = ids(8);
+  const sw = playSwiss(t, 2, (a, b) => t.indexOf(a) < t.indexOf(b));
+  const table = finalStandings(sw, { championId: 't3' });
+  assert.equal(table[0].trackId, 't3');
+  assert.equal(table.length, 8);
 });
