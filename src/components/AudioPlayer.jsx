@@ -29,7 +29,9 @@ export default function AudioPlayer({ src, accent }) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(savedVolume);
   const [muted, setMuted] = useState(false);
+  // Позиция ползунка во время перетаскивания — чтобы timeupdate не дёргал его назад
   const [seeking, setSeeking] = useState(null);
+  const [dragging, setDragging] = useState(false);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -81,6 +83,30 @@ export default function AudioPlayer({ src, accent }) {
     }
   };
 
+  // Перемотка применяется сразу — и на одиночный клик, и при перетаскивании, и с клавиатуры
+  const seekTo = (value) => {
+    const a = audio.current;
+    if (!a || !Number.isFinite(value)) return;
+    a.currentTime = value;
+    setTime(value);
+    setSeeking(dragging ? value : null);
+  };
+
+  // Кнопку мыши могут отпустить за пределами ползунка — ловим это на всём окне
+  useEffect(() => {
+    if (!dragging) return;
+    const stop = () => {
+      setDragging(false);
+      setSeeking(null);
+    };
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => {
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+    };
+  }, [dragging]);
+
   const shownTime = seeking ?? time;
   const progress = duration ? (shownTime / duration) * 100 : 0;
   const volShown = muted ? 0 : volume;
@@ -120,15 +146,8 @@ export default function AudioPlayer({ src, accent }) {
             step={0.1}
             value={shownTime}
             style={{ '--p': `${progress}%` }}
-            onChange={(e) => setSeeking(parseFloat(e.target.value))}
-            onPointerUp={() => {
-              if (seeking != null && audio.current) audio.current.currentTime = seeking;
-              setSeeking(null);
-            }}
-            onKeyUp={() => {
-              if (seeking != null && audio.current) audio.current.currentTime = seeking;
-              setSeeking(null);
-            }}
+            onChange={(e) => seekTo(parseFloat(e.target.value))}
+            onPointerDown={() => setDragging(true)}
             aria-label="Перемотка"
             disabled={!duration}
           />
