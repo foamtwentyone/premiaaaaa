@@ -23,15 +23,44 @@ export function normalizeAudioUrl(url) {
   }
   const drive = u.match(/drive\.google\.com\/file\/d\/([^/]+)/);
   if (drive) return `https://drive.google.com/uc?export=download&id=${drive[1]}`;
+  // Файл из папки public/tracks: «tracks/песня.mp3» → «/tracks/%D0%BF...mp3»
+  if (!/^[a-z]+:/i.test(u)) {
+    const path = u.replace(/^\/?(public\/)?/, '/');
+    return encodeURI(decodeURI(path));
+  }
   return u;
 }
+
+/** Обложка без Storage: сжимаем до 400×400 JPEG и храним прямо в документе трека (~30–50 КБ) */
+export function compressImage(file, size = 400) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const src = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, size / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * k);
+      canvas.height = Math.round(img.height * k);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(src);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = () => reject(new Error('Не удалось прочитать картинку'));
+    img.src = src;
+  });
+}
+
+const normalizeCover = (u = '') => {
+  const s = u.trim();
+  return s && !/^[a-z]+:/i.test(s) ? encodeURI(decodeURI(s.replace(/^\/?(public\/)?/, '/'))) : s;
+};
 
 export async function saveTrack(id, data) {
   const payload = {
     title: data.title.trim(),
     artist: data.artist.trim(),
     audioUrl: normalizeAudioUrl(data.audioUrl),
-    coverUrl: data.coverUrl?.trim() || '',
+    coverUrl: data.coverUrl?.startsWith('data:') ? data.coverUrl : normalizeCover(data.coverUrl),
     updatedAt: serverTimestamp(),
   };
   if (id) return updateDoc(doc(db, 'tracks', id), payload);
@@ -43,6 +72,8 @@ export const deleteTrack = (id) => deleteDoc(doc(db, 'tracks', id));
 export function uploadFile(folder, file, onProgress) {
   if (!storage) throw new Error('Firebase Storage не настроен');
   const safe = file.name.replace(/[^\w.\-]+/g, '_');
+  // Без включённого Storage загрузка иначе «висит» несколько минут, повторяя попытки
+  storage.maxUploadRetryTime = 15000;
   const task = uploadBytesResumable(ref(storage, `${folder}/${Date.now()}_${safe}`), file, {
     contentType: file.type,
   });

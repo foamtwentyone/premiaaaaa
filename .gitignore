@@ -5,3 +5,7 @@ dist
 .firebase
 *.log
 .DS_Store
+
+# Аудиофайлы треков (кладутся в public/tracks и выкладываются вместе с сайтом)
+public/tracks/*
+!public/tracks/.gitkeep

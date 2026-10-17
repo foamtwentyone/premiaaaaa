@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useData } from '../lib/store.jsx';
 import { storage } from '../lib/firebase.js';
 import {
-  saveTrack, deleteTrack, uploadFile, startTournament, startPlayoffs, resetTournament,
+  saveTrack, deleteTrack, uploadFile, compressImage, normalizeAudioUrl, startTournament, startPlayoffs, resetTournament,
   openMatch, closeMatch, reopenMatch, setWinner, openMany, closeAllLive, countVotes,
 } from '../lib/api.js';
 import { isPowerOfTwo } from '../lib/tournament.js';
@@ -81,6 +81,31 @@ export default function Admin() {
 
 const EMPTY = { title: '', artist: '', audioUrl: '', coverUrl: '' };
 
+/** Обложка сжимается в браузере и хранится в базе — Storage не нужен */
+function CoverButton({ onDone }) {
+  const toast = useToast();
+  return (
+    <label className="btn btn--ghost btn--sm" style={{ cursor: 'pointer' }}>
+      <Icon.upload /> Загрузить обложку
+      <input
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          try {
+            onDone(await compressImage(file));
+          } catch (err) {
+            toast(err.message, 'error');
+          }
+        }}
+      />
+    </label>
+  );
+}
+
 function UploadButton({ folder, accept, onDone, label }) {
   const [progress, setProgress] = useState(null);
   const toast = useToast();
@@ -101,7 +126,12 @@ function UploadButton({ folder, accept, onDone, label }) {
             onDone(await uploadFile(folder, file, setProgress));
             toast('Файл загружен');
           } catch (err) {
-            toast(`Загрузка не удалась: ${err.code ?? err.message}`, 'error');
+            toast(
+              err.code?.startsWith('storage/')
+                ? 'Firebase Storage не включён (нужен тариф Blaze). Положите mp3 в папку public/tracks — см. подсказку ниже'
+                : `Загрузка не удалась: ${err.message}`,
+              'error',
+            );
           } finally {
             setProgress(null);
           }
@@ -149,18 +179,25 @@ function TracksAdmin() {
         </div>
         <div className="field">
           <label>Ссылка на аудио (mp3 / m4a / ogg)</label>
-          <input className="input" type="url" value={form.audioUrl} onChange={set('audioUrl')} required placeholder="https://…/track.mp3" />
+          <input className="input" value={form.audioUrl} onChange={set('audioUrl')} required placeholder="/tracks/песня.mp3 или https://…/track.mp3" />
           <div className="row">
             <UploadButton folder="audio" accept="audio/*" label={<><Icon.upload /> Загрузить файл</>} onDone={set('audioUrl')} />
-            <span className="tiny">Dropbox и Google Drive ссылки преобразуются в прямые автоматически</span>
           </div>
+          <span className="tiny">
+            Бесплатный способ: положите mp3 в папку проекта <code>public/tracks</code> и впишите <code>/tracks/имя_файла.mp3</code>.
+            Подойдут и прямые ссылки (Dropbox преобразуется автоматически). Ссылки на Яндекс Диск, ВК и YouTube не работают.
+          </span>
         </div>
         <div className="field">
           <label>Обложка (необязательно)</label>
-          <input className="input" type="url" value={form.coverUrl} onChange={set('coverUrl')} placeholder="https://…/cover.jpg" />
-          <UploadButton folder="covers" accept="image/*" label={<><Icon.upload /> Загрузить обложку</>} onDone={set('coverUrl')} />
+          <div className="row">
+            {form.coverUrl && <Cover track={{ id: 'preview', title: form.title, coverUrl: form.coverUrl }} style={{ width: 56, borderRadius: 14 }} />}
+            <CoverButton onDone={set('coverUrl')} />
+            {form.coverUrl && <button type="button" className="btn btn--ghost btn--sm" onClick={() => set('coverUrl')('')}>Убрать</button>}
+          </div>
+          <input className="input" value={form.coverUrl.startsWith('data:') ? '' : form.coverUrl} onChange={set('coverUrl')} placeholder="…или ссылка на картинку" />
         </div>
-        {form.audioUrl && <div style={{ marginBottom: 16 }}><AudioPlayer src={form.audioUrl} accent="var(--purple)" /></div>}
+        {form.audioUrl && <div style={{ marginBottom: 16 }}><AudioPlayer src={normalizeAudioUrl(form.audioUrl)} accent="var(--purple)" /></div>}
         <div className="row">
           <button className="btn btn--pink" disabled={busy}>{editing ? 'Сохранить' : 'Добавить трек'}</button>
           {editing && <button type="button" className="btn btn--ghost" onClick={() => { setEditing(null); setForm(EMPTY); }}>Отмена</button>}
