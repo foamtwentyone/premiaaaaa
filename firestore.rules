@@ -1,0 +1,84 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Админ — тот, для кого вручную создан документ admins/{uid} в консоли Firebase
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Голосовать можно только с подтверждённой почтой (Google-вход подтверждён всегда)
+    function canVote() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isScore(x) {
+      return x is int && x >= 1 && x <= 10;
+    }
+
+    function matchIsLive(matchId) {
+      let m = get(/databases/$(database)/documents/matches/$(matchId)).data;
+      return m.status == 'live'
+        && (!('endsAt' in m) || m.endsAt == null || request.time < m.endsAt);
+    }
+
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if true;
+      allow create, update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'updatedAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 40;
+      allow delete: if false;
+    }
+
+    match /tracks/{trackId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /tournament/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /matches/{matchId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Один голос на пользователя в бою: id документа = `${matchId}_${uid}`
+    match /votes/{voteId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.uid == request.auth.uid);
+
+      allow create: if canVote()
+        && request.resource.data.keys().hasOnly(['matchId', 'uid', 'a', 'b', 'updatedAt'])
+        && request.resource.data.uid == request.auth.uid
+        && voteId == request.resource.data.matchId + '_' + request.auth.uid
+        && isScore(request.resource.data.a)
+        && isScore(request.resource.data.b)
+        && matchIsLive(request.resource.data.matchId);
+
+      allow update: if canVote()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['matchId', 'uid', 'a', 'b', 'updatedAt'])
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.matchId == resource.data.matchId
+        && isScore(request.resource.data.a)
+        && isScore(request.resource.data.b)
+        && matchIsLive(resource.data.matchId);
+
+      allow delete: if isAdmin();
+    }
+  }
+}
