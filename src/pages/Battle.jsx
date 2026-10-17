@@ -189,8 +189,10 @@ export default function Battle() {
         ) : (
           <motion.div key="wait" className="card vote-bar" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             <div>
-              <h3 style={{ fontSize: 20 }}>{m.status === 'pending' ? 'Соперники ещё не определены' : 'Голосование скоро откроется'}</h3>
-              <div className="muted">Треки уже можно послушать заранее.</div>
+              <h3 style={{ fontSize: 20 }}>
+                {m.status === 'cancelled' ? 'Бой отменён' : m.status === 'pending' ? 'Соперники ещё не определены' : 'Голосование скоро откроется'}
+              </h3>
+              <div className="muted">{m.status === 'cancelled' ? 'Турнир завершён досрочно.' : 'Треки уже можно послушать заранее.'}</div>
             </div>
           </motion.div>
         )}

@@ -246,6 +246,29 @@ export async function startPlayoffs(tournament) {
   });
 }
 
+/**
+ * Досрочное завершение: голосование во всех открытых и будущих боях отменяется,
+ * чемпиона выбирает организатор. Состояние сохраняется, чтобы турнир можно было возобновить.
+ */
+export async function finishEarly(tournament, championId) {
+  const all = await loadMatches();
+  const cancel = all.filter((m) => m.status === 'live' || m.status === 'ready' || m.status === 'pending');
+  await writeMatches(cancel.map((m) => ({ ...m, status: 'cancelled', prevStatus: m.status, endsAt: null })));
+  await updateDoc(TOURNAMENT(), {
+    stage: 'finished', championId, endedEarly: true, stageBeforeFinish: tournament.stage, finishedAt: serverTimestamp(),
+  });
+}
+
+/** Отменить досрочное завершение: бои возвращаются в прежнее состояние (открытые — в «готов») */
+export async function resumeTournament(tournament) {
+  const all = await loadMatches();
+  const back = all.filter((m) => m.status === 'cancelled');
+  await writeMatches(back.map(({ prevStatus, ...m }) => ({ ...m, status: prevStatus === 'pending' ? 'pending' : 'ready' })));
+  await updateDoc(TOURNAMENT(), {
+    stage: tournament.stageBeforeFinish ?? 'playoffs', championId: null, endedEarly: false, stageBeforeFinish: null,
+  });
+}
+
 export async function resetTournament() {
   const old = await loadMatches();
   await deleteVotesFor(old.map((m) => m.id));

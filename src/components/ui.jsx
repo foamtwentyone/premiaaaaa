@@ -46,6 +46,7 @@ const STATUS = {
   ready: ['ready', 'Скоро'],
   pending: ['pending', 'Ждёт соперников'],
   done: ['done', 'Завершён'],
+  cancelled: ['pending', 'Отменён'],
 };
 
 export function StatusBadge({ status }) {

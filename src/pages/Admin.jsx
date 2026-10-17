@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useData } from '../lib/store.jsx';
 import { storage } from '../lib/firebase.js';
 import {
-  saveTrack, deleteTrack, uploadFile, compressImage, normalizeAudioUrl, trackFromFile, listFolderTracks, startTournament, startPlayoffs, resetTournament,
+  finishEarly, resumeTournament, saveTrack, deleteTrack, uploadFile, compressImage, normalizeAudioUrl, trackFromFile, listFolderTracks, startTournament, startPlayoffs, resetTournament,
   openMatch, closeMatch, reopenMatch, setWinner, openMany, closeAllLive, countVotes,
 } from '../lib/api.js';
-import { isPowerOfTwo, swissWinOptions, swissMatchCount, swissFinished } from '../lib/tournament.js';
+import { isPowerOfTwo, swissWinOptions, swissMatchCount, swissFinished, currentRanking } from '../lib/tournament.js';
 import AudioPlayer from '../components/AudioPlayer.jsx';
 import { Cover, Empty, StatusBadge, Icon, useToast, spring } from '../components/ui.jsx';
 
@@ -319,6 +319,75 @@ function TracksAdmin() {
 
 /* ================= Турнир ================= */
 
+/** Досрочное завершение: организатор выбирает победителя (по умолчанию — текущий лидер) */
+function EarlyFinish() {
+  const { tournament, matches, trackById } = useData();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const participants = [...new Set(matches.flatMap((m) => [m.trackA, m.trackB]).filter(Boolean))];
+  const ranking = currentRanking(participants, matches);
+  const [pick, setPick] = useState('');
+  const champion = pick || ranking[0] || '';
+
+  const run = async (fn, ok) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast(ok);
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (tournament.endedEarly) {
+    return (
+      <div className="notice" style={{ marginTop: 24 }}>
+        Турнир завершён досрочно. Победитель: <b>{trackById[tournament.championId]?.title ?? '—'}</b>.
+        <div className="row" style={{ marginTop: 12 }}>
+          <button
+            className="btn btn--ghost btn--sm"
+            disabled={busy}
+            onClick={() => confirm('Возобновить турнир? Отменённые бои снова станут доступны для голосования.') && run(() => resumeTournament(tournament), 'Турнир возобновлён')}
+          >
+            Возобновить турнир
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 24, paddingTop: 20, borderTop: '3px solid var(--line)' }}>
+      <h3 style={{ fontSize: 18, marginBottom: 6 }}>Завершить досрочно</h3>
+      <p className="tiny" style={{ marginTop: 0 }}>
+        Голосование во всех открытых и оставшихся боях остановится, победитель появится на главной. Сыгранные результаты сохранятся.
+      </p>
+      <div className="field">
+        <span className="label">Победитель турнира</span>
+        <select className="select" value={champion} onChange={(e) => setPick(e.target.value)}>
+          {ranking.map((id, i) => (
+            <option key={id} value={id}>
+              {i === 0 ? '★ ' : ''}{trackById[id]?.title ?? id}{trackById[id]?.artist ? ` — ${trackById[id].artist}` : ''}{i === 0 ? ' (лидер сейчас)' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button
+        className="btn btn--orange btn--block"
+        disabled={busy || !champion}
+        onClick={() =>
+          confirm(`Завершить турнир досрочно? Победитель — «${trackById[champion]?.title}».`) &&
+          run(() => finishEarly(tournament, champion), 'Турнир завершён')
+        }
+      >
+        <Icon.flag /> Завершить турнир досрочно
+      </button>
+    </div>
+  );
+}
+
 function TournamentAdmin() {
   const { tracks, tournament, matches } = useData();
   const toast = useToast();
@@ -527,6 +596,8 @@ function TournamentAdmin() {
             </button>
           </div>
         )}
+
+        {(stage === 'groups' || stage === 'playoffs' || tournament?.endedEarly) && <EarlyFinish />}
 
         {stage !== 'setup' && (
           <button

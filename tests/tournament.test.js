@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  seedOrder, roundRobin, splitIntoGroups, buildGroupMatches, groupStandings,
+  seedOrder, roundRobin, splitIntoGroups, buildGroupMatches, groupStandings, currentRanking,
   seedsFromGroups, buildPlayoffs, resolveSlots, decide, champion, placements,
 } from '../src/lib/tournament.js';
 
@@ -87,4 +87,27 @@ test('decide: ничья по среднему решается количест
   assert.equal(r.avgA, 4);
   assert.equal(r.avgB, 4);
   assert.equal(r.winner, 'b');
+});
+
+test('currentRanking: в плей-офф лидер — непобеждённый в верхней сетке', () => {
+  let ms = buildPlayoffs(['a', 'b', 'c', 'd'], []);
+  const play = (id, winnerSide) => {
+    ms = resolveSlots(ms.map((m) => {
+      if (m.id !== id) return m;
+      const aWins = winnerSide === 'A';
+      return { ...m, status: 'done', result: decide(m, [{ matchId: m.id, a: aWins ? 9 : 2, b: aWins ? 2 : 9 }]) };
+    }));
+  };
+  play('ub-r1-m1', 'B'); // d побеждает a
+  play('ub-r1-m2', 'A'); // b побеждает c
+  const r = currentRanking(['a', 'b', 'c', 'd'], ms);
+  assert.deepEqual(r.slice(0, 2).sort(), ['b', 'd']);
+});
+
+test('currentRanking: на групповом этапе — по победам', () => {
+  const ms = [
+    { id: 'x', stage: 'group', status: 'done', trackA: 'a', trackB: 'b', result: { winner: 'b', loser: 'a', avgA: 3, avgB: 8 } },
+    { id: 'y', stage: 'group', status: 'done', trackA: 'b', trackB: 'c', result: { winner: 'b', loser: 'c', avgA: 7, avgB: 5 } },
+  ];
+  assert.equal(currentRanking(['a', 'b', 'c'], ms)[0], 'b');
 });

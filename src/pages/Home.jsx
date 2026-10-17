@@ -129,7 +129,7 @@ export default function Home() {
           <motion.span className="champion__crown" animate={{ rotate: [-8, 8, -8], y: [0, -6, 0] }} transition={{ duration: 2.5, repeat: Infinity }}>
             <Icon.crown />
           </motion.span>
-          <div className="badge" style={{ background: '#fff', color: 'var(--ink)' }}>Трек года 2026</div>
+          <div className="badge" style={{ background: '#fff', color: 'var(--ink)' }}>Трек года 2026{tournament?.endedEarly ? ' · досрочно' : ''}</div>
           <Cover track={champ} />
           <h2>{champ.title}</h2>
           <p style={{ fontWeight: 800, fontSize: 18, margin: '8px 0 0' }}>{champ.artist}</p>

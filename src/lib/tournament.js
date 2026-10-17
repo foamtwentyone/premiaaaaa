@@ -433,3 +433,42 @@ export function placements(matches) {
   }
   return result;
 }
+
+/**
+ * Рейтинг на текущий момент — для досрочного завершения турнира.
+ * В плей-офф выше те, кто ещё не выбыл, без поражений (верхняя сетка) и с большим числом побед;
+ * на групповом этапе — по победам, поражениям и разнице средних баллов.
+ */
+export function currentRanking(trackIds, matches) {
+  const done = matches.filter((m) => m.status === 'done' && m.result);
+  const playoff = done.filter((m) => m.stage !== 'group');
+  const stats = new Map(trackIds.map((id) => [id, { id, wins: 0, losses: 0, diff: 0, poWins: 0, poLosses: 0, out: false }]));
+  for (const m of done) {
+    const { winner, loser, avgA, avgB } = m.result;
+    const w = stats.get(winner);
+    const l = stats.get(loser);
+    const d = Math.abs(avgA - avgB);
+    if (w) { w.wins++; w.diff += d; }
+    if (l) { l.losses++; l.diff -= d; }
+    if (m.stage !== 'group') {
+      if (w) w.poWins++;
+      if (l) l.poLosses++;
+      // Поражение в нижней сетке или в финале — вылет
+      if (l && (m.stage === 'lower' || m.stage === 'final')) l.out = true;
+    }
+  }
+  const inPlayoff = new Set(matches.filter((m) => m.stage !== 'group').flatMap((m) => [m.trackA, m.trackB]).filter(Boolean));
+  const hasPlayoff = inPlayoff.size > 0;
+  const rank = (s) => (!hasPlayoff ? 0 : !inPlayoff.has(s.id) ? 3 : s.out ? 2 : s.poLosses === 0 ? 0 : 1);
+  return [...stats.values()]
+    .sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        (hasPlayoff ? b.poWins - a.poWins : 0) ||
+        b.wins - a.wins ||
+        a.losses - b.losses ||
+        b.diff - a.diff ||
+        trackIds.indexOf(a.id) - trackIds.indexOf(b.id),
+    )
+    .map((s) => s.id);
+}
