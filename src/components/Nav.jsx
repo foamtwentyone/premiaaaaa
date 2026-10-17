@@ -23,7 +23,7 @@ export default function Nav() {
     <>
     <motion.header className="nav" initial={{ y: -80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ ...spring, delay: 0.1 }}>
       <Link to="/" className="logo">
-        <span className="logo__mark">★</span>
+        <span className="logo__mark"><Icon.star /></span>
         <span>
           ТРЕК<span className="logo__year">’26</span>
         </span>

@@ -40,7 +40,7 @@ export default function Battles() {
               ))}
             </motion.div>
           ) : (
-            <Empty icon={tab === 'live' ? '📻' : tab === 'done' ? '🏁' : '⏳'} title={tab === 'live' ? 'Сейчас голосований нет' : 'Пока пусто'}>
+            <Empty icon={tab === 'live' ? 'radio' : tab === 'done' ? 'flag' : 'hourglass'} title={tab === 'live' ? 'Сейчас голосований нет' : 'Пока пусто'}>
               {tab === 'live' ? 'Загляни позже — новые бои открываются по ходу турнира.' : 'Здесь появятся бои, когда турнир стартует.'}
             </Empty>
           )}

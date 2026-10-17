@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Cover, StatusBadge, pop } from './ui.jsx';
+import { Cover, StatusBadge, Icon, pop } from './ui.jsx';
 import { useCountdown, formatLeft, useData } from '../lib/store.jsx';
 
 function Side({ track, score, state }) {
@@ -36,8 +36,10 @@ export default function MatchCard({ match }) {
         <div className="match-card__vs">VS</div>
         <Side track={b} score={r?.avgB} state={state(match.trackB)} />
         <div className="match-card__foot">
-          <span>{r ? `${r.votes} голос${plural(r.votes)}` : voted ? '✓ Вы проголосовали' : match.status === 'live' ? 'Оцените оба трека →' : ''}</span>
-          <span>{left != null ? `⏱ ${formatLeft(left)}` : ''}</span>
+          <span className="inline-ico">
+            {r ? `${r.votes} голос${plural(r.votes)}` : voted ? <><Icon.check /> Вы проголосовали</> : match.status === 'live' ? 'Оцените оба трека →' : ''}
+          </span>
+          <span className="inline-ico">{left != null && <><Icon.timer /> {formatLeft(left)}</>}</span>
         </div>
       </Link>
     </motion.div>

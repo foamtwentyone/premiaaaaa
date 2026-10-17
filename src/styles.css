@@ -55,7 +55,7 @@ body {
   font-family: var(--font-body);
   font-weight: 600;
   color: var(--ink);
-  background: linear-gradient(160deg, var(--bg-a) 0%, #e6e1ff 50%, var(--bg-b) 100%) fixed;
+  background: transparent;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
@@ -96,48 +96,55 @@ h4 {
 
 /* ---------- Фон: плавающий узор + мягкие пятна ---------- */
 
+/* Все фоновые анимации — только transform/opacity: их считает GPU-композитор,
+   без перерисовки страницы, поэтому они идут на полной частоте экрана (120/144 Гц). */
+
 .bg {
   position: fixed;
   inset: 0;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
+  background: linear-gradient(160deg, var(--bg-a) 0%, #e6e1ff 50%, var(--bg-b) 100%);
+  contain: strict;
 }
 
 .bg__pattern {
   position: absolute;
-  inset: -200px;
+  inset: -480px;
   opacity: 0.5;
   background-image:
     radial-gradient(circle at 25% 25%, rgba(255, 255, 255, 0.9) 0 6px, transparent 7px),
     radial-gradient(circle at 75% 75%, rgba(138, 77, 255, 0.12) 0 10px, transparent 11px);
   background-size: 120px 120px;
-  animation: pattern 30s linear infinite;
-  transform: rotate(-12deg);
+  transform: rotate(-12deg) translate3d(0, 0, 0);
+  animation: pattern 20s linear infinite;
+  will-change: transform;
 }
 
 @keyframes pattern {
   to {
-    background-position: 240px 240px, 240px 240px;
+    transform: rotate(-12deg) translate3d(240px, 240px, 0);
   }
 }
 
+/* Мягкие пятна: размытие нарисовано градиентом, а не filter: blur() — это в разы дешевле */
 .bg__blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.55;
+  background: radial-gradient(circle closest-side, var(--c) 0%, transparent 100%);
   animation: blob 18s ease-in-out infinite alternate;
+  will-change: transform;
 }
 
-.bg__blob--1 { width: 520px; height: 520px; background: var(--pink); top: -160px; left: -120px; opacity: 0.28; }
-.bg__blob--2 { width: 460px; height: 460px; background: var(--blue); bottom: -160px; right: -100px; opacity: 0.32; animation-delay: -6s; }
-.bg__blob--3 { width: 360px; height: 360px; background: var(--yellow); top: 40%; left: 55%; opacity: 0.22; animation-delay: -12s; }
+.bg__blob--1 { --c: rgba(255, 62, 165, 0.32); width: 760px; height: 760px; top: -280px; left: -240px; }
+.bg__blob--2 { --c: rgba(34, 193, 255, 0.36); width: 700px; height: 700px; bottom: -280px; right: -220px; animation-delay: -6s; }
+.bg__blob--3 { --c: rgba(255, 210, 51, 0.26); width: 560px; height: 560px; top: 35%; left: 50%; animation-delay: -12s; }
 
 @keyframes blob {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(60px, -40px) scale(1.15); }
-  100% { transform: translate(-40px, 50px) scale(0.95); }
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(60px, -40px, 0) scale(1.15); }
+  100% { transform: translate3d(-40px, 50px, 0) scale(0.95); }
 }
 
 /* ---------- Каркас ---------- */
@@ -224,9 +231,9 @@ h4 {
   align-items: center;
   gap: 8px;
   padding: 8px 8px 8px 18px;
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(16px) saturate(1.4);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-radius: 999px;
   box-shadow: var(--chunk-lg);
 }
@@ -242,6 +249,10 @@ h4 {
   white-space: nowrap;
 }
 
+.logo__mark svg {
+  font-size: 18px;
+}
+
 .logo__mark {
   width: 34px;
   height: 34px;
@@ -255,7 +266,11 @@ h4 {
   transition: transform 0.4s var(--spring);
 }
 
-.logo:hover .logo__mark {
+.logo:hover .logo__mark svg {
+  font-size: 18px;
+}
+
+.logo__mark {
   transform: rotate(8deg) scale(1.1);
 }
 
@@ -317,17 +332,24 @@ h4 {
 }
 
 .nav__live {
+  position: relative;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--pink);
-  box-shadow: 0 0 0 0 rgba(255, 62, 165, 0.6);
-  animation: ping 1.6s infinite;
+}
+
+.nav__live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--pink);
+  animation: ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
 @keyframes ping {
-  70% { box-shadow: 0 0 0 8px rgba(255, 62, 165, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(255, 62, 165, 0); }
+  75%, 100% { transform: scale(3); opacity: 0; }
 }
 
 .nav__user {
@@ -365,8 +387,8 @@ h4 {
     justify-content: space-around;
     padding: 6px;
     background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     border-radius: 26px;
     box-shadow: var(--chunk-lg);
   }
@@ -705,7 +727,7 @@ h4 {
   border-radius: 24px;
   display: grid;
   place-items: center;
-  font-size: 30px;
+  color: #fff;
   box-shadow: 0 8px 0 rgba(0, 0, 0, 0.1);
 }
 
@@ -782,6 +804,24 @@ h4 {
 .champion__crown {
   font-size: 64px;
   display: inline-block;
+  color: #fff;
+  filter: drop-shadow(0 5px 0 rgba(42, 24, 89, 0.15));
+}
+
+.champion__crown svg {
+  display: block;
+}
+
+/* Иконка в строке текста */
+.inline-ico {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.badge svg,
+.btn svg {
+  font-size: 1.15em;
 }
 
 .champion .cover {
@@ -1077,8 +1117,10 @@ h4 {
   width: 4px;
   border-radius: 2px;
   background: var(--accent, var(--purple));
-  height: 4px;
-  transition: height 0.2s;
+  height: 18px;
+  transform: scaleY(0.22);
+  transform-origin: bottom;
+  transition: transform 0.2s;
 }
 
 .eq.is-on span {
@@ -1090,8 +1132,8 @@ h4 {
 .eq.is-on span:nth-child(4) { animation-delay: -0.15s; }
 
 @keyframes eq {
-  0% { height: 4px; }
-  100% { height: 18px; }
+  0% { transform: scaleY(0.22); }
+  100% { transform: scaleY(1); }
 }
 
 .player__error {
@@ -1654,9 +1696,16 @@ h4 {
 }
 
 .empty__icon {
-  font-size: 56px;
-  display: inline-block;
-  margin-bottom: 14px;
+  width: 76px;
+  height: 76px;
+  border-radius: 26px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 38px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--pink), var(--purple));
+  box-shadow: 0 6px 0 var(--purple-d);
+  margin-bottom: 18px;
 }
 
 .empty h3 {

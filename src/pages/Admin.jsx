@@ -9,7 +9,7 @@ import {
 } from '../lib/api.js';
 import { isPowerOfTwo } from '../lib/tournament.js';
 import AudioPlayer from '../components/AudioPlayer.jsx';
-import { Cover, Empty, StatusBadge, useToast, spring } from '../components/ui.jsx';
+import { Cover, Empty, StatusBadge, Icon, useToast, spring } from '../components/ui.jsx';
 
 const TABS = [
   { id: 'tracks', label: 'Треки' },
@@ -23,7 +23,7 @@ export default function Admin() {
 
   if (!user || !isAdmin) {
     return (
-      <Empty icon="🔒" title="Только для организатора">
+      <Empty icon="lock" title="Только для организатора">
         {user ? (
           <>
             Чтобы получить доступ, создайте в Firestore документ <code>admins/{user.uid}</code> (любое содержимое) и обновите страницу.
@@ -132,14 +132,14 @@ function TracksAdmin() {
           <label>Ссылка на аудио (mp3 / m4a / ogg)</label>
           <input className="input" type="url" value={form.audioUrl} onChange={set('audioUrl')} required placeholder="https://…/track.mp3" />
           <div className="row">
-            <UploadButton folder="audio" accept="audio/*" label="⬆ Загрузить файл" onDone={set('audioUrl')} />
+            <UploadButton folder="audio" accept="audio/*" label={<><Icon.upload /> Загрузить файл</>} onDone={set('audioUrl')} />
             <span className="tiny">Dropbox и Google Drive ссылки преобразуются в прямые автоматически</span>
           </div>
         </div>
         <div className="field">
           <label>Обложка (необязательно)</label>
           <input className="input" type="url" value={form.coverUrl} onChange={set('coverUrl')} placeholder="https://…/cover.jpg" />
-          <UploadButton folder="covers" accept="image/*" label="⬆ Загрузить обложку" onDone={set('coverUrl')} />
+          <UploadButton folder="covers" accept="image/*" label={<><Icon.upload /> Загрузить обложку</>} onDone={set('coverUrl')} />
         </div>
         {form.audioUrl && <div style={{ marginBottom: 16 }}><AudioPlayer src={form.audioUrl} accent="var(--purple)" /></div>}
         <div className="row">
@@ -169,7 +169,7 @@ function TracksAdmin() {
                   disabled={locked}
                   onClick={() => confirm(`Удалить «${t.title}»?`) && deleteTrack(t.id).then(() => toast('Удалено'))}
                 >
-                  ✕
+                  <Icon.close />
                 </button>
               </motion.div>
             ))}
@@ -461,7 +461,7 @@ function MatchesAdmin() {
   const [filter, setFilter] = useState('active');
   const [busy, setBusy] = useState(false);
 
-  if (!matches.length) return <Empty icon="🥊" title="Боёв пока нет">Запустите турнир во вкладке «Турнир».</Empty>;
+  if (!matches.length) return <Empty icon="swords" title="Боёв пока нет">Запустите турнир во вкладке «Турнир».</Empty>;
 
   const ready = matches.filter((m) => m.status === 'ready');
   const live = matches.filter((m) => m.status === 'live');

@@ -34,7 +34,7 @@ export default function Tracks() {
           ))}
         </motion.div>
       ) : (
-        <Empty icon="💿" title={tracks.length ? 'Ничего не нашлось' : 'Треков пока нет'}>
+        <Empty icon="disc" title={tracks.length ? 'Ничего не нашлось' : 'Треков пока нет'}>
           {tracks.length ? 'Попробуй другой запрос.' : 'Организатор скоро добавит номинантов.'}
         </Empty>
       )}

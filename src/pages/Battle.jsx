@@ -6,7 +6,7 @@ import { useData, useCountdown, formatLeft, isVotingOpen } from '../lib/store.js
 import { submitVote } from '../lib/api.js';
 import AudioPlayer from '../components/AudioPlayer.jsx';
 import ScorePicker from '../components/ScorePicker.jsx';
-import { Cover, StatusBadge, Empty, CountUp, accentFor, fireConfetti, useToast, softSpring, spring } from '../components/ui.jsx';
+import { Cover, StatusBadge, Empty, CountUp, Icon, accentFor, fireConfetti, useToast, softSpring, spring } from '../components/ui.jsx';
 import { plural } from '../components/MatchCard.jsx';
 
 function Contender({ track, side, score, onScore, canVote, result, avg, delay }) {
@@ -29,7 +29,7 @@ function Contender({ track, side, score, onScore, canVote, result, avg, delay })
           <div className="contender__artist">{track?.artist ?? ''}</div>
           {isWinner && (
             <motion.span className="badge badge--done" style={{ marginTop: 10 }} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ ...spring, delay: 0.6 }}>
-              🏆 Проходит дальше
+              <Icon.trophy /> Проходит дальше
             </motion.span>
           )}
         </div>
@@ -76,7 +76,7 @@ export default function Battle() {
     }
   }, [m?.status]);
 
-  if (!m) return <Empty icon="🤔" title="Бой не найден"><Link to="/battles" className="link-btn">← Ко всем боям</Link></Empty>;
+  if (!m) return <Empty icon="question" title="Бой не найден"><Link to="/battles" className="link-btn">← Ко всем боям</Link></Empty>;
 
   const ta = trackById[m.trackA];
   const tb = trackById[m.trackB];
@@ -91,7 +91,7 @@ export default function Battle() {
     try {
       await submitVote(m.id, user.uid, a, b);
       fireConfetti(btn.current);
-      toast(mine ? 'Голос обновлён' : 'Голос принят! 🎉');
+      toast(mine ? 'Голос обновлён' : 'Голос принят!');
     } catch (e) {
       toast(e.code === 'permission-denied' ? 'Голосование по этому бою закрыто' : 'Не получилось отправить голос', 'error');
     } finally {
@@ -107,7 +107,7 @@ export default function Battle() {
           <h1 className="page-title" style={{ fontSize: 'clamp(26px, 4.5vw, 40px)', marginTop: 8 }}>{m.label}</h1>
         </div>
         <div className="row">
-          {left != null && left > 0 && <span className="badge badge--yellow">⏱ {formatLeft(left)}</span>}
+          {left != null && left > 0 && <span className="badge badge--yellow"><Icon.timer /> {formatLeft(left)}</span>}
           <StatusBadge status={left === 0 ? 'ready' : m.status} />
         </div>
       </div>
@@ -169,7 +169,7 @@ export default function Battle() {
             ) : (
               <>
                 <div>
-                  <h3 style={{ fontSize: 20 }}>{mine && !changed ? 'Голос учтён ✓' : 'Оцени оба трека'}</h3>
+                  <h3 style={{ fontSize: 20 }} className="inline-ico">{mine && !changed ? <>Голос учтён <Icon.check /></> : 'Оцени оба трека'}</h3>
                   <div className="muted">
                     {mine && !changed ? 'Можно изменить оценки, пока бой открыт.' : 'Средний балл всех слушателей решит, кто пройдёт дальше.'}
                   </div>

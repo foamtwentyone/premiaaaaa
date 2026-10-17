@@ -20,7 +20,7 @@ export default function Playoffs() {
           <Bracket matches={playoff} />
         </motion.div>
       ) : (
-        <Empty icon="🪜" title="Сетка появится после группового этапа">
+        <Empty icon="bracket" title="Сетка появится после группового этапа">
           Как только определятся участники плей-офф, здесь будет верхняя и нижняя сетка.
         </Empty>
       )}

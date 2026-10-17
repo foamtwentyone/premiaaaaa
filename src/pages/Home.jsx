@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useData } from '../lib/store.jsx';
 import { placements } from '../lib/tournament.js';
 import MatchCard from '../components/MatchCard.jsx';
-import { Cover, CountUp, stagger, pop, softSpring, spring } from '../components/ui.jsx';
+import { Cover, CountUp, Icon, stagger, pop, softSpring, spring } from '../components/ui.jsx';
 
 const STAGE_TEXT = {
   setup: 'Скоро старт',
@@ -48,10 +48,10 @@ function BouncyTitle({ lines }) {
 }
 
 const STICKERS = [
-  { emoji: '🎧', top: '0%', left: '6%', bg: 'var(--yellow)', size: 74, rot: -12 },
-  { emoji: '🔥', top: '2%', right: '8%', bg: 'var(--pink)', size: 66, rot: 10 },
-  { emoji: '🏆', bottom: '18%', left: '9%', bg: 'var(--blue)', size: 60, rot: 8 },
-  { emoji: '🎤', bottom: '6%', right: '12%', bg: 'var(--lime)', size: 70, rot: -8 },
+  { icon: Icon.headphones, top: '0%', left: '6%', bg: 'var(--yellow)', size: 74, rot: -12 },
+  { icon: Icon.flame, top: '2%', right: '8%', bg: 'var(--pink)', size: 66, rot: 10 },
+  { icon: Icon.trophy, bottom: '18%', left: '9%', bg: 'var(--blue)', size: 60, rot: 8 },
+  { icon: Icon.mic, bottom: '6%', right: '12%', bg: 'var(--lime)', size: 70, rot: -8 },
 ];
 
 export default function Home() {
@@ -70,7 +70,7 @@ export default function Home() {
             <motion.div
               key={i}
               className="sticker"
-              style={{ ...s, width: s.size, height: s.size, background: s.bg }}
+              style={{ top: s.top, left: s.left, right: s.right, bottom: s.bottom, width: s.size, height: s.size, background: s.bg, fontSize: s.size * 0.46 }}
               initial={{ scale: 0, rotate: s.rot - 40 }}
               animate={{ scale: 1, rotate: s.rot, y: [0, -14, 0] }}
               transition={{
@@ -79,7 +79,7 @@ export default function Home() {
                 y: { duration: 3 + i * 0.4, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 },
               }}
             >
-              {s.emoji}
+              <s.icon />
             </motion.div>
           ))}
         </div>
@@ -127,7 +127,7 @@ export default function Home() {
       {champ && (
         <motion.section className="section card champion" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={softSpring}>
           <motion.span className="champion__crown" animate={{ rotate: [-8, 8, -8], y: [0, -6, 0] }} transition={{ duration: 2.5, repeat: Infinity }}>
-            👑
+            <Icon.crown />
           </motion.span>
           <div className="badge" style={{ background: '#fff', color: 'var(--ink)' }}>Трек года 2026</div>
           <Cover track={champ} />

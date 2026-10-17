@@ -45,7 +45,7 @@ function Routed() {
         <Route path="/tracks" element={<Page><Tracks /></Page>} />
         <Route path="/login" element={<Page><Login /></Page>} />
         <Route path="/admin" element={<Page><Admin /></Page>} />
-        <Route path="*" element={<Page><Empty icon="🌀" title="Страница не найдена">Похоже, этот трек ещё не записан.</Empty></Page>} />
+        <Route path="*" element={<Page><Empty icon="question" title="Страница не найдена">Похоже, этот трек ещё не записан.</Empty></Page>} />
       </Routes>
     </AnimatePresence>
   );

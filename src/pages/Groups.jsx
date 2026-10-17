@@ -11,7 +11,7 @@ export default function Groups() {
     return (
       <>
         <h1 className="page-title">Групповой этап</h1>
-        <Empty icon="🗂️" title="Группы ещё не сформированы">Организатор скоро запустит турнир.</Empty>
+        <Empty icon="table" title="Группы ещё не сформированы">Организатор скоро запустит турнир.</Empty>
       </>
     );
   }
